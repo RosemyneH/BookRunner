@@ -23,8 +23,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             meson ninja-build pkg-config rpm file zstd wget curl \
-            libwayland-dev wayland-protocols libwayland-cursor-dev \
-            libcairo2-dev libpango1.0-dev libpangocairo1.0-dev \
+            libwayland-dev wayland-protocols \
+            libcairo2-dev libpango1.0-dev \
             libgdk-pixbuf-2.0-dev libglib2.0-dev libsqlite3-dev libxkbcommon-dev \
             librsvg2-bin
 

@@ -19,7 +19,7 @@ On each **annotated or lightweight tag** matching `v*`, the [Release workflow](.
 
 | Artifact | Notes |
 |----------|--------|
-| `bookrunner_<version>_amd64.deb` | Debian/Ubuntu-style package. |
+| `bookrunner_<version>-1_amd64.deb` | Debian/Ubuntu-style package (`nfpm` default naming). |
 | `bookrunner-<version>-1.x86_64.rpm` | RPM for Fedora/RHEL-style distros (depends names target Fedora). |
 | `bookrunner-<version>-x86_64.AppImage` | Self-contained bundle; uses [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy) + GTK plugin for GdkPixbuf loaders. |
 | `SHA256SUMS` | Checksums for the above. |
@@ -45,7 +45,7 @@ If the AppImage does not start on older systems, ensure FUSE or `libfuse2` is av
 
 Dependencies (Debian/Ubuntu names):
 
-`meson`, `ninja-build`, `pkg-config`, `libwayland-dev`, `wayland-protocols`, `libwayland-cursor-dev`, `libcairo2-dev`, `libpango1.0-dev`, `libgdk-pixbuf-2.0-dev`, `libglib2.0-dev`, `libsqlite3-dev`, `libxkbcommon-dev`
+`meson`, `ninja-build`, `pkg-config`, `libwayland-dev` (includes Wayland cursor headers), `wayland-protocols`, `libcairo2-dev`, `libpango1.0-dev` (includes Pangocairo), `libgdk-pixbuf-2.0-dev`, `libglib2.0-dev`, `libsqlite3-dev`, `libxkbcommon-dev`
 
 ```bash
 meson setup build --prefix=/usr -Dbuildtype=release
