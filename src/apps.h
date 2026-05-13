@@ -13,6 +13,7 @@ struct AppEntry {
 GPtrArray *apps_load(void);
 void apps_free(GPtrArray *apps);
 void apps_filter_indices(const GPtrArray *apps, const char *query, gint **out_indices, int *out_n);
+GdkPixbuf *app_entry_icon(AppEntry *e);
 GdkPixbuf *app_load_icon(GDesktopAppInfo *info, int size_px);
 GdkPixbuf *br_stub_icon(const char *hint, int size_px);
 GdkPixbuf *br_icon_from_theme(const char *name, int size_px);

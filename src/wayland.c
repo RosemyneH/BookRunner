@@ -26,8 +26,6 @@
 
 #include "cursor-shape-v1-client-protocol.h"
 
-#define BR_FRAMEBUF_N 3
-
 static int br_wheel_select_delta(const AppContext *ctx, int physical_step) {
   return ctx->config.invert_list_wheel ? -physical_step : physical_step;
 }

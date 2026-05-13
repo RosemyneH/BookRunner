@@ -164,7 +164,6 @@ static void add_app_and_file_rows(AppContext *ctx) {
         &ctx->candidate_arena, g_app_info_get_display_name(G_APP_INFO(e->info)));
     c->subtitle =
         br_arena_strdup(&ctx->candidate_arena, g_app_info_get_name(G_APP_INFO(e->info)));
-    c->icon = e->icon;
     c->app_index = (guint)idx[i];
     g_ptr_array_add(ctx->candidates, c);
     used++;

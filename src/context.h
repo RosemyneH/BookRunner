@@ -22,6 +22,8 @@ struct wl_cursor_theme;
 
 #define BR_MAX_QUERY 512
 
+#define BR_FRAMEBUF_N 2
+
 typedef struct ShmBuffer ShmBuffer;
 struct ShmBuffer {
   int fd;
@@ -84,7 +86,7 @@ struct AppContext {
   struct wl_cursor_theme *cursor_theme;
   struct wl_surface *cursor_surface;
 
-  ShmBuffer framebufs[3];
+  ShmBuffer framebufs[BR_FRAMEBUF_N];
   int surf_width;
   int surf_height;
   bool needs_draw;

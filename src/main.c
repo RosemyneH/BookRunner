@@ -6,7 +6,7 @@
 #include <string.h>
 
 static GdkPixbuf *load_icon(const char *icon_name) {
-  return br_icon_from_theme(icon_name, 40);
+  return br_icon_from_theme(icon_name, 32);
 }
 
 int main(void) {
