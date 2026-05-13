@@ -1,11 +1,5 @@
 #include "context.h"
 
-#include "apps.h"
-#include "candidates.h"
-#include "config.h"
-#include "files_search.h"
-
-#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,6 +16,7 @@ int main(void) {
   memset(&ctx, 0, sizeof ctx);
   br_arena_init(&ctx.candidate_arena);
   br_config_load(&ctx.config);
+  ctx.usage_db = br_usage_open();
   ctx.apps = apps_load();
   br_file_search_init(&ctx.file_search);
   ctx.icon_file = load_icon("text-x-generic");
@@ -49,6 +44,8 @@ int main(void) {
     if (!g_app_info_launch(G_APP_INFO(ctx.launch_app), NULL, NULL, &err)) {
       g_printerr("bookrunner: %s\n", err ? err->message : "launch app failed");
       g_clear_error(&err);
+    } else {
+      br_usage_record(ctx.usage_db, g_app_info_get_id(G_APP_INFO(ctx.launch_app)));
     }
   }
 
@@ -60,6 +57,8 @@ int main(void) {
   }
   apps_free(ctx.apps);
   br_file_search_fini(&ctx.file_search);
+  br_usage_close(ctx.usage_db);
+  ctx.usage_db = NULL;
   br_arena_free(&ctx.candidate_arena);
   br_config_clear(&ctx.config);
   g_clear_object(&ctx.icon_file);
