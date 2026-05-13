@@ -13,6 +13,17 @@
 #include <string.h>
 #include <time.h>
 
+static int br_mod_i(int i, int n) {
+  if (n <= 0) {
+    return 0;
+  }
+  int m = i % n;
+  if (m < 0) {
+    m += n;
+  }
+  return m;
+}
+
 static void br_cairo_set_source_pixbuf(cairo_t *cr, GdkPixbuf *pb, double x, double y) {
   int w = gdk_pixbuf_get_width(pb);
   int h = gdk_pixbuf_get_height(pb);
@@ -212,19 +223,28 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
     br_list_metrics(ctx, width, height, &u, &y_list, &list_h, &row_h, &visible);
     int n = (int)ctx->candidates->len;
     double smax = fmax(0.0, (double)n * row_h - list_h);
+    bool strip = ctx->config.list_wrap;
+    double scroll_lo = 0;
+    double scroll_hi = smax;
+    if (strip) {
+      scroll_lo = row_h * 0.5 - list_h * 0.5;
+      scroll_hi = (double)(n - 1) * row_h + row_h * 0.5 - list_h * 0.5;
+      if (scroll_hi < scroll_lo) {
+        scroll_hi = scroll_lo;
+      }
+    }
     bool fast = ctx->list_scroll_interact_ms != 0 && (now - ctx->list_scroll_interact_ms) < 28;
-    double center = 0;
+    double center = (double)ctx->selected * row_h + row_h * 0.5 - list_h * 0.5;
     double goal = 0;
-    if (smax <= 0.0) {
+    if (!strip && smax <= 0.0) {
       center = 0;
       goal = 0;
     } else {
-      center = (double)ctx->selected * row_h + row_h * 0.5 - list_h * 0.5;
-      center = fmax(0, fmin(center, smax));
+      center = fmax(scroll_lo, fmin(center, scroll_hi));
       double vis_lo = (double)ctx->selected * row_h + row_h - list_h;
       double vis_hi = (double)ctx->selected * row_h;
-      vis_lo = fmax(0, fmin(vis_lo, smax));
-      vis_hi = fmax(0, fmin(vis_hi, smax));
+      vis_lo = fmax(scroll_lo, fmin(vis_lo, scroll_hi));
+      vis_hi = fmax(scroll_lo, fmin(vis_hi, scroll_hi));
       if (vis_lo > vis_hi) {
         vis_lo = center;
         vis_hi = center;
@@ -236,11 +256,11 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
     if (!ctx->list_scroll_init_done) {
       ctx->list_scroll_px = goal;
       ctx->list_scroll_init_done = true;
-    } else if (dt > 0 && smax > 0) {
+    } else if (dt > 0 && (strip || smax > 0)) {
       const double k = fast ? 72.0 : 96.0;
       ctx->list_scroll_px += (goal - ctx->list_scroll_px) * fmin(1.0, k * dt);
-      ctx->list_scroll_px = fmax(0, fmin(ctx->list_scroll_px, smax));
-    } else if (smax <= 0) {
+      ctx->list_scroll_px = fmax(scroll_lo, fmin(ctx->list_scroll_px, scroll_hi));
+    } else if (!strip && smax <= 0) {
       ctx->list_scroll_px = 0;
     }
   } else {
@@ -299,11 +319,19 @@ bool bookrunner_pointer_pick_row(AppContext *ctx, int width, int height, double 
   }
   const double row_top_in_list = py - y_list;
   double idx_f = (row_top_in_list + ctx->list_scroll_px - ctx->list_scroll_anim_px) / row_h;
-  int g = (int)floor(idx_f + 1e-9);
-  if (g < 0 || g >= (int)ctx->candidates->len) {
+  int vi = (int)floor(idx_f + 1e-9);
+  int n = (int)ctx->candidates->len;
+  if (n <= 0) {
     return false;
   }
-  *out_row = g;
+  if (ctx->config.list_wrap) {
+    *out_row = br_mod_i(vi, n);
+  } else {
+    if (vi < 0 || vi >= n) {
+      return false;
+    }
+    *out_row = vi;
+  }
   return true;
 }
 
@@ -389,46 +417,94 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   cairo_rectangle(cr, u.x0 - 4, y_list, u.inner_w - 2, list_h);
   cairo_clip(cr);
   const double smax = fmax(0.0, (double)n * row_h - list_h);
-  int i0 = 0;
-  if (smax > 0) {
-    i0 = (int)floor((ctx->list_scroll_px - ctx->list_scroll_anim_px) / row_h) - 1;
-    if (i0 < 0) {
-      i0 = 0;
+  const double scroll_eff = ctx->list_scroll_px - ctx->list_scroll_anim_px;
+  if (cfg->list_wrap && n > 0) {
+    double scroll_lo = row_h * 0.5 - list_h * 0.5;
+    double scroll_hi = (double)(n - 1) * row_h + row_h * 0.5 - list_h * 0.5;
+    if (scroll_hi < scroll_lo) {
+      scroll_hi = scroll_lo;
     }
-  }
-  for (int i = i0; i < n; i++) {
-    double ry = y_list + (double)i * row_h - ctx->list_scroll_px + ctx->list_scroll_anim_px;
-    if (ry > y_list + list_h) {
-      break;
+    int i0 = (int)floor(scroll_eff / row_h) - 2;
+    int i1 = (int)ceil((scroll_eff + list_h) / row_h) + 2;
+    for (int vi = i0; vi <= i1; vi++) {
+      int ci = br_mod_i(vi, n);
+      double ry = y_list + (double)vi * row_h - scroll_eff;
+      if (ry > y_list + list_h) {
+        continue;
+      }
+      if (ry + row_h < y_list) {
+        continue;
+      }
+      BrCandidate *c = g_ptr_array_index(ctx->candidates, (guint)ci);
+      if (ci == ctx->selected) {
+        uint32_t sel_col = br_blend_u32(cfg->col_row_sel, 0xffffffffu, ctx->sel_pulse * 0.22);
+        cairo_save(cr);
+        draw_round_rect(cr, u.x0 - 4, ry - 2, u.inner_w - 2, row_h - 2, 8);
+        cr_u32(cr, sel_col);
+        cairo_fill(cr);
+        cairo_restore(cr);
+      }
+      GdkPixbuf *ic = c->icon;
+      if (c->kind == BR_CAND_APP && !ic) {
+        AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
+        ic = e->icon;
+      }
+      draw_icon_fit(cr, ic, u.x0 + 6, ry + 3, list_icon);
+      pango_layout_set_text(rlo, c->title ? c->title : "", -1);
+      draw_text_shadowed(cr, rlo, text_x, ry + 5, cfg->col_text);
     }
-    if (ry + row_h < y_list) {
-      continue;
+  } else {
+    int i0 = 0;
+    if (smax > 0) {
+      i0 = (int)floor(scroll_eff / row_h) - 1;
+      if (i0 < 0) {
+        i0 = 0;
+      }
     }
-    BrCandidate *c = g_ptr_array_index(ctx->candidates, (guint)i);
-    if (i == ctx->selected) {
-      uint32_t sel_col = br_blend_u32(cfg->col_row_sel, 0xffffffffu, ctx->sel_pulse * 0.22);
-      cairo_save(cr);
-      draw_round_rect(cr, u.x0 - 4, ry - 2, u.inner_w - 2, row_h - 2, 8);
-      cr_u32(cr, sel_col);
-      cairo_fill(cr);
-      cairo_restore(cr);
+    for (int i = i0; i < n; i++) {
+      double ry = y_list + (double)i * row_h - scroll_eff;
+      if (ry > y_list + list_h) {
+        break;
+      }
+      if (ry + row_h < y_list) {
+        continue;
+      }
+      BrCandidate *c = g_ptr_array_index(ctx->candidates, (guint)i);
+      if (i == ctx->selected) {
+        uint32_t sel_col = br_blend_u32(cfg->col_row_sel, 0xffffffffu, ctx->sel_pulse * 0.22);
+        cairo_save(cr);
+        draw_round_rect(cr, u.x0 - 4, ry - 2, u.inner_w - 2, row_h - 2, 8);
+        cr_u32(cr, sel_col);
+        cairo_fill(cr);
+        cairo_restore(cr);
+      }
+      GdkPixbuf *ic = c->icon;
+      if (c->kind == BR_CAND_APP && !ic) {
+        AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
+        ic = e->icon;
+      }
+      draw_icon_fit(cr, ic, u.x0 + 6, ry + 3, list_icon);
+      pango_layout_set_text(rlo, c->title ? c->title : "", -1);
+      draw_text_shadowed(cr, rlo, text_x, ry + 5, cfg->col_text);
     }
-    GdkPixbuf *ic = c->icon;
-    if (c->kind == BR_CAND_APP && !ic) {
-      AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
-      ic = e->icon;
-    }
-    draw_icon_fit(cr, ic, u.x0 + 6, ry + 3, list_icon);
-    pango_layout_set_text(rlo, c->title ? c->title : "", -1);
-    draw_text_shadowed(cr, rlo, text_x, ry + 5, cfg->col_text);
   }
   cairo_restore(cr);
 
-  if (smax > 1.0) {
+  if (smax > 1.0 || (cfg->list_wrap && n > 1)) {
     double track_top = y_list + 2;
     double track_h = list_h - 4;
     double thumb_h = fmax(row_h * 0.45, track_h * list_h / ((double)n * row_h));
-    double t = smax > 0 ? ctx->list_scroll_px / smax : 0;
+    double t = 0;
+    if (cfg->list_wrap && n > 0) {
+      double slo = row_h * 0.5 - list_h * 0.5;
+      double shi = (double)(n - 1) * row_h + row_h * 0.5 - list_h * 0.5;
+      double span = shi - slo;
+      if (span > 1e-6) {
+        t = (ctx->list_scroll_px - slo) / span;
+      }
+    } else if (smax > 0) {
+      t = ctx->list_scroll_px / smax;
+    }
     t = fmin(1.0, fmax(0.0, t));
     double thumb_y = track_top + t * (track_h - thumb_h);
     cairo_save(cr);
