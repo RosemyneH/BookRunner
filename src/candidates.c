@@ -41,15 +41,6 @@ static const char *bang_kw_label(const char *kw) {
   if (!kw || !kw[0]) {
     return "Bang";
   }
-  if (strcmp(kw, "g") == 0) {
-    return "Google";
-  }
-  if (strcmp(kw, "w") == 0) {
-    return "Wikipedia";
-  }
-  if (strcmp(kw, "yt") == 0) {
-    return "YouTube";
-  }
   if (strcmp(kw, "f") == 0) {
     return "Files";
   }
@@ -70,18 +61,9 @@ static const char *bang_row_label(AppContext *ctx, const char *kw) {
   return bang_kw_label(kw);
 }
 
-static const char *bang_kw_icon_name(const char *kw) {
+static const char *bang_builtin_icon(const char *kw) {
   if (!kw) {
-    return "web-browser";
-  }
-  if (strcmp(kw, "g") == 0) {
-    return "google";
-  }
-  if (strcmp(kw, "w") == 0) {
-    return "wikipedia";
-  }
-  if (strcmp(kw, "yt") == 0) {
-    return "youtube";
+    return NULL;
   }
   if (strcmp(kw, "f") == 0) {
     return "folder";
@@ -89,11 +71,26 @@ static const char *bang_kw_icon_name(const char *kw) {
   if (strcmp(kw, "set") == 0) {
     return "preferences-desktop";
   }
+  return NULL;
+}
+
+static const char *bang_resolve_icon(const AppContext *ctx, const char *kw) {
+  if (!kw) {
+    return "web-browser";
+  }
+  const char *h = g_hash_table_lookup(ctx->config.bang_icons, kw);
+  if (h && h[0]) {
+    return h;
+  }
+  const char *b = bang_builtin_icon(kw);
+  if (b) {
+    return b;
+  }
   return "applications-internet";
 }
 
-static void bang_row_set_icon(BrCandidate *c, const char *kw) {
-  GdkPixbuf *pb = br_icon_from_theme(bang_kw_icon_name(kw), 36);
+static void bang_row_set_icon(AppContext *ctx, BrCandidate *c, const char *kw) {
+  GdkPixbuf *pb = br_icon_from_theme(bang_resolve_icon(ctx, kw), 36);
   c->icon = pb;
 }
 
@@ -190,7 +187,7 @@ static void add_f_rows(AppContext *ctx, const char *tail) {
     c->title = br_arena_strdup(&ctx->candidate_arena, "Files >");
     c->subtitle = NULL;
     c->open_uri = NULL;
-    bang_row_set_icon(c, "f");
+    bang_row_set_icon(ctx, c, "f");
     g_ptr_array_add(ctx->candidates, c);
     used++;
     append_file_rows(ctx, cap, &used);
@@ -212,7 +209,7 @@ static void add_set_help_bang_row(AppContext *ctx, const char *kw, const char *t
   c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, kw));
   c->subtitle = NULL;
   c->bang_kw = br_arena_strdup(&ctx->candidate_arena, kw);
-  bang_row_set_icon(c, kw);
+  bang_row_set_icon(ctx, c, kw);
   c->open_uri = NULL;
   g_ptr_array_add(ctx->candidates, c);
   (*used)++;
@@ -243,7 +240,7 @@ static void add_set_rows(AppContext *ctx) {
       "Files > %s", ctx->config.bang_f_enabled ? "on" : "off");
   t->title = br_arena_strdup(&ctx->candidate_arena, ft);
   t->subtitle = NULL;
-  bang_row_set_icon(t, "f");
+  bang_row_set_icon(ctx, t, "f");
   g_ptr_array_add(ctx->candidates, t);
   used++;
 
@@ -324,9 +321,6 @@ static void add_set_rows(AppContext *ctx) {
   if (ctx->config.bang_f_enabled && !g_hash_table_contains(ctx->config.bangs, "f")) {
     add_set_help_bang_row(ctx, "f", "", cap, &used);
   }
-  add_set_help_bang_row(ctx, "g", "https://www.google.com/search?q=%s", cap, &used);
-  add_set_help_bang_row(ctx, "w", "https://en.wikipedia.org/wiki/Special:Search?search=%s", cap, &used);
-  add_set_help_bang_row(ctx, "yt", "https://www.youtube.com/results?search_query=%s", cap, &used);
 
   GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
   GHashTableIter bit;
@@ -334,9 +328,6 @@ static void add_set_rows(AppContext *ctx) {
   g_hash_table_iter_init(&bit, ctx->config.bangs);
   while (g_hash_table_iter_next(&bit, &gk, &gv)) {
     const char *key = (const char *)gk;
-    if (strcmp(key, "g") == 0 || strcmp(key, "w") == 0 || strcmp(key, "yt") == 0) {
-      continue;
-    }
     if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
       continue;
     }
@@ -405,7 +396,7 @@ static void add_bang_prefix_rows(AppContext *ctx, const char *kw) {
     c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, key));
     c->subtitle = NULL;
     c->bang_kw = br_arena_strdup(&ctx->candidate_arena, key);
-    bang_row_set_icon(c, key);
+    bang_row_set_icon(ctx, c, key);
     c->open_uri = NULL;
     g_ptr_array_add(ctx->candidates, c);
     n++;
@@ -463,7 +454,7 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
       c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, key));
       c->subtitle = NULL;
       c->bang_kw = br_arena_strdup(&ctx->candidate_arena, key);
-      bang_row_set_icon(c, key);
+      bang_row_set_icon(ctx, c, key);
       c->open_uri = NULL;
       g_ptr_array_add(ctx->candidates, c);
       n++;
@@ -486,7 +477,7 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     c->title = br_arena_strdup(&ctx->candidate_arena, lab);
     c->subtitle = NULL;
     c->bang_kw = br_arena_strdup(&ctx->candidate_arena, kw);
-    bang_row_set_icon(c, kw);
+    bang_row_set_icon(ctx, c, kw);
     c->open_uri = NULL;
     g_ptr_array_add(ctx->candidates, c);
     return;
@@ -501,7 +492,7 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   g_autofree gchar *line = g_strdup_printf("%s > %s", lab, tail);
   c->title = br_arena_strdup(&ctx->candidate_arena, line);
   c->subtitle = NULL;
-  bang_row_set_icon(c, kw);
+  bang_row_set_icon(ctx, c, kw);
   c->open_uri = br_arena_strdup(&ctx->candidate_arena, uri);
   g_ptr_array_add(ctx->candidates, c);
 }
@@ -628,7 +619,7 @@ static void br_ctx_bang_followup_start(AppContext *ctx, const char *kw) {
   ctx->bang_follow_q[0] = '\0';
   g_strlcpy(ctx->bang_restore_query, ctx->query, sizeof ctx->bang_restore_query);
   ctx->query[0] = '\0';
-  ctx->bang_follow_icon = br_icon_from_theme(bang_kw_icon_name(kw), 36);
+  ctx->bang_follow_icon = br_icon_from_theme(bang_resolve_icon(ctx, kw), 36);
   ctx->selected = 0;
   br_ctx_refilter(ctx);
   br_file_search_on_query_changed(ctx);

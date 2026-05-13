@@ -67,6 +67,24 @@ See `scripts/run-bookrunner.sh --help` for Wayland/GDK-related options.
 
 User config path: `~/.config/bookrunner/config.ini` (see `src/config.c` for supported keys).
 
+### Bangs (web shortcuts)
+
+Built-in **default bang URLs are not hardcoded** anymore. The shipped list lives in **`data/bangs_generated.ini`** (installed to `…/share/bookrunner/bangs_generated.ini`) with three sections:
+
+- **`[bangs]`** — `keyword=https://…%s…` templates (`%s` is the escaped query).
+- **`[bang_desc]`** — optional friendly titles for the launcher list.
+- **`[bang_icons]`** — freedesktop-style icon names passed to Gtk’s icon theme (missing names fall back to `applications-internet`).
+
+Merge order: packaged ini → optional `BOOKRUNNER_BANGS_INI` → `~/.local/share/bookrunner/bangs_generated.ini` → **`[bangs]` / `[bang_desc]` / `[bang_icons]` in `config.ini`** (later wins on duplicate keys).
+
+If you previously had a huge auto-generated `bangs_generated.ini` under `~/.local/share/bookrunner/`, remove it so the packaged curated list applies (or replace it with your own).
+
+Regenerate the curated list after editing `tools/gen_bangs_ini.py`:
+
+```bash
+python3 tools/gen_bangs_ini.py data/bangs_generated.ini
+```
+
 ## Single instance
 
 A second launch while BookRunner is running connects to a socket under `$XDG_RUNTIME_DIR` and **closes the existing instance** without starting a second window. If `XDG_RUNTIME_DIR` is unset, this behavior is skipped.

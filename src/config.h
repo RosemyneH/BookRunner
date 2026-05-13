@@ -38,6 +38,7 @@ struct BrConfig {
 
   GHashTable *bangs;
   GHashTable *bang_desc;
+  GHashTable *bang_icons;
   GHashTable *ignored_apps;
   gboolean bang_f_enabled;
 };
