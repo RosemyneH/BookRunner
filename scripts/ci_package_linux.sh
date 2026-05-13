@@ -24,15 +24,17 @@ cp -a staging/usr AppDir/
 rsvg-convert -w 256 data/icons/hicolor/scalable/apps/bookrunner.svg -o bookrunner.png
 curl -sSfLO https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
 curl -sSfLO https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-curl -sSfLO https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
-chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage-x86_64.AppImage linuxdeploy-plugin-gtk-x86_64.AppImage
+curl -sSfLo linuxdeploy-plugin-gtk.sh \
+  https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/3b67a1d1c1b0c8268f57f2bce40fe2d33d409cea/linuxdeploy-plugin-gtk.sh
+chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 export ARCH=x86_64
 export APPIMAGE_EXTRACT_AND_RUN=1
+export DEPLOY_GTK_VERSION=3
 ./linuxdeploy-x86_64.AppImage --appdir AppDir \
   -e AppDir/usr/bin/bookrunner \
   -d data/bookrunner.desktop \
   -i bookrunner.png \
-  --plugin gtk \
+  --plugin ./linuxdeploy-plugin-gtk.sh \
   --plugin appimage
 shopt -s nullglob
 out=""
