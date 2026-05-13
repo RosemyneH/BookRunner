@@ -164,6 +164,11 @@ void br_config_load(BrConfig *c) {
   {
     g_autofree gchar *pkg_bangs = g_build_filename(BR_PKGDATADIR, "bangs_generated.ini", NULL);
     br_config_merge_bangs_ini(c, pkg_bangs);
+#if defined(BR_SRC_BANGS_INI)
+    if (!g_file_test(pkg_bangs, G_FILE_TEST_IS_REGULAR)) {
+      br_config_merge_bangs_ini(c, BR_SRC_BANGS_INI);
+    }
+#endif
   }
   if (g_getenv("BOOKRUNNER_BANGS_INI")) {
     br_config_merge_bangs_ini(c, g_getenv("BOOKRUNNER_BANGS_INI"));
