@@ -30,7 +30,7 @@ void br_state_load(BrConfig *cfg) {
 
 void br_state_save(const BrConfig *cfg) {
   g_autofree gchar *dir = g_build_filename(g_get_user_data_dir(), "bookrunner", NULL);
-  if (!g_mkdir_with_parents(dir, 0755)) {
+  if (g_mkdir_with_parents(dir, 0755) < 0) {
     return;
   }
   g_autofree gchar *path = g_build_filename(dir, "state.ini", NULL);
