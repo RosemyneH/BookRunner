@@ -66,10 +66,10 @@ static GStrv split_roots(const char *s) {
 
 void br_config_init_defaults(BrConfig *c) {
   memset(c, 0, sizeof(*c));
-  c->ui_width = 360;
-  c->ui_height = 400;
+  c->ui_width = 380;
+  c->ui_height = 480;
   c->font = g_strdup("Sans");
-  c->font_size = 13.0;
+  c->font_size = 14.0;
   c->bang_prefix = g_strdup("!");
   c->max_visible_rows = 512;
   c->debounce_ms = 160;

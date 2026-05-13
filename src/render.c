@@ -155,9 +155,9 @@ static void br_ui_layout(const AppContext *ctx, int width, int height, BrUILayou
   (void)height;
   u->pad = 10;
   u->corner = 10;
-  u->hero_r = 24;
-  u->row_h = 28;
-  u->input_h = 28;
+  u->hero_r = 28;
+  u->row_h = 44;
+  u->input_h = 38;
   u->x0 = u->pad + 8;
   u->inner_w = width - 2 * u->pad - 16;
   u->y0 = u->pad + 6;
@@ -391,24 +391,26 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
 
   PangoLayout *qlo = pango_cairo_create_layout(cr);
   PangoFontDescription *qfd = pango_font_description_from_string(cfg->font);
-  pango_font_description_set_absolute_size(qfd, (int)(cfg->font_size * PANGO_SCALE));
+  pango_font_description_set_absolute_size(qfd, (int)(cfg->font_size * PANGO_SCALE * 1.06));
   pango_layout_set_font_description(qlo, qfd);
   pango_layout_set_width(qlo, (int)((u.inner_w - 16) * PANGO_SCALE));
   pango_layout_set_text(qlo, ctx->query, -1);
-  draw_text_shadowed(cr, qlo, u.x0 + 8, u.y_input + 8, cfg->col_text);
+  draw_text_shadowed(cr, qlo, u.x0 + 8, u.y_input + 10, cfg->col_text);
   g_object_unref(qlo);
   pango_font_description_free(qfd);
 
   PangoLayout *rlo = pango_cairo_create_layout(cr);
   PangoFontDescription *rfd = pango_font_description_from_string(cfg->font);
-  pango_font_description_set_absolute_size(rfd, (int)(cfg->font_size * PANGO_SCALE * 0.95));
+  pango_font_description_set_absolute_size(rfd, (int)(cfg->font_size * PANGO_SCALE * 1.12));
   pango_layout_set_font_description(rlo, rfd);
 
-  const double list_icon = 22;
-  const double text_x = u.x0 + 6 + list_icon + 6;
   double y_list, list_h, row_h;
   int visible_slots;
   br_list_metrics(ctx, width, height, &u, &y_list, &list_h, &row_h, &visible_slots);
+  const double list_icon = fmax(20.0, fmin(row_h - 10.0, floor(row_h * 0.70)));
+  const double text_x = u.x0 + 8 + list_icon + 8;
+  const double icon_pad_y = (row_h - list_icon) * 0.5;
+  const double text_pad_y = fmax(2.0, (row_h - cfg->font_size * 1.12 * 1.28) * 0.5);
   int n = (int)ctx->candidates->len;
   const double scroll_track_x = u.x0 + u.inner_w - 3;
   const double scroll_track_w = 3.0;
@@ -449,9 +451,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
         AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
         ic = e->icon;
       }
-      draw_icon_fit(cr, ic, u.x0 + 6, ry + 3, list_icon);
+      draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
-      draw_text_shadowed(cr, rlo, text_x, ry + 5, cfg->col_text);
+      draw_text_shadowed(cr, rlo, text_x, ry + text_pad_y, cfg->col_text);
     }
   } else {
     int i0 = 0;
@@ -483,9 +485,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
         AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
         ic = e->icon;
       }
-      draw_icon_fit(cr, ic, u.x0 + 6, ry + 3, list_icon);
+      draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
-      draw_text_shadowed(cr, rlo, text_x, ry + 5, cfg->col_text);
+      draw_text_shadowed(cr, rlo, text_x, ry + text_pad_y, cfg->col_text);
     }
   }
   cairo_restore(cr);
