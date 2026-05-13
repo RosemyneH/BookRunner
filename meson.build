@@ -72,6 +72,7 @@ executable(
       'src/xdg_popup_stub.c',
       'src/tablet_tool_v2_stub.c',
       'src/usage_db.c',
+      'src/single_instance.c',
     ),
     wl_proto_c,
     wl_proto_h,

@@ -50,6 +50,7 @@ struct AppContext {
   int64_t list_scroll_interact_ms;
   bool done;
   int exit_code;
+  int instance_listen_fd;
 
   GDesktopAppInfo *launch_app;
   char *launch_uri;

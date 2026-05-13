@@ -1,4 +1,5 @@
 #include "context.h"
+#include "single_instance.h"
 
 #include <gio/gio.h>
 #include <stdio.h>
@@ -12,8 +13,13 @@ int main(void) {
   if (!g_getenv("GDK_BACKEND")) {
     g_setenv("GDK_BACKEND", "broadway", TRUE);
   }
+  int instance_listen_fd = -1;
+  if (!br_single_instance_acquire(&instance_listen_fd)) {
+    return 0;
+  }
   AppContext ctx;
   memset(&ctx, 0, sizeof ctx);
+  ctx.instance_listen_fd = instance_listen_fd;
   br_arena_init(&ctx.candidate_arena);
   br_config_load(&ctx.config);
   ctx.usage_db = br_usage_open();
@@ -63,5 +69,6 @@ int main(void) {
   br_config_clear(&ctx.config);
   g_clear_object(&ctx.icon_file);
   g_clear_object(&ctx.icon_bang);
+  br_single_instance_release(instance_listen_fd);
   return rc == 0 ? 0 : (rc > 0 ? rc : 1);
 }

@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 #include <linux/input-event-codes.h>
@@ -677,6 +678,29 @@ static void br_wayland_teardown(AppContext *ctx) {
   input_xkb_fini(&ctx->ixkb);
 }
 
+static void br_instance_accept_toggle(AppContext *ctx) {
+  if (ctx->instance_listen_fd < 0) {
+    return;
+  }
+  for (;;) {
+    int c = accept4(ctx->instance_listen_fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (c < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      break;
+    }
+    char buf[32];
+    (void)read(c, buf, sizeof buf);
+    close(c);
+    ctx->done = true;
+    ctx->exit_code = 1;
+  }
+}
+
 int bookrunner_wayland_run(AppContext *ctx) {
   for (int i = 0; i < BR_FRAMEBUF_N; i++) {
     ctx->framebufs[i].fd = -1;
@@ -731,13 +755,23 @@ int bookrunner_wayland_run(AppContext *ctx) {
       br_surface_paint(ctx);
     }
     wl_display_flush(ctx->display);
-    struct pollfd pfds[2];
+    struct pollfd pfds[4];
     int n = 0;
+    const int wl_i = 0;
     pfds[n].fd = wl_display_get_fd(ctx->display);
     pfds[n].events = POLLIN;
     n++;
+    int inst_i = -1;
+    if (ctx->instance_listen_fd >= 0) {
+      inst_i = n;
+      pfds[n].fd = ctx->instance_listen_fd;
+      pfds[n].events = POLLIN;
+      n++;
+    }
+    int file_i = -1;
     int nf = ctx->file_search.notify_pipe[0];
     if (nf >= 0) {
+      file_i = n;
       pfds[n].fd = nf;
       pfds[n].events = POLLIN;
       n++;
@@ -764,14 +798,17 @@ int bookrunner_wayland_run(AppContext *ctx) {
     if (pr < 0 && errno != EINTR) {
       break;
     }
-    if (n > 1 && (pfds[1].revents & POLLIN)) {
+    if (inst_i >= 0 && (pfds[inst_i].revents & POLLIN)) {
+      br_instance_accept_toggle(ctx);
+    }
+    if (file_i >= 0 && (pfds[file_i].revents & POLLIN)) {
       br_file_search_drain_notify(ctx);
       br_ctx_refilter(ctx);
     }
-    if (pfds[0].revents & (POLLERR | POLLHUP)) {
+    if (pfds[wl_i].revents & (POLLERR | POLLHUP)) {
       break;
     }
-    if (pfds[0].revents & POLLIN) {
+    if (pfds[wl_i].revents & POLLIN) {
       if (wl_display_read_events(ctx->display) != 0) {
         break;
       }
