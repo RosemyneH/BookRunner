@@ -1,6 +1,7 @@
 #pragma once
 
 #include <gio/gio.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum {
@@ -31,6 +32,9 @@ struct BrConfig {
   uint32_t col_dim;
   uint32_t col_border;
   uint32_t col_row_sel;
+
+  bool list_wrap;
+  bool invert_list_wheel;
 
   GHashTable *bangs;
 };

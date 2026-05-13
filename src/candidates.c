@@ -74,6 +74,20 @@ static void clamp_selected(AppContext *ctx) {
   }
 }
 
+static void wrap_selected(AppContext *ctx) {
+  int n = (int)ctx->candidates->len;
+  if (n <= 0) {
+    ctx->selected = 0;
+    return;
+  }
+  while (ctx->selected < 0) {
+    ctx->selected += n;
+  }
+  while (ctx->selected >= n) {
+    ctx->selected -= n;
+  }
+}
+
 static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   if (!kw) {
     return;
@@ -199,8 +213,26 @@ void br_ctx_select_move(AppContext *ctx, int delta) {
   if (!ctx->candidates) {
     return;
   }
+  int n = (int)ctx->candidates->len;
+  if (n <= 0) {
+    return;
+  }
+  int prev = ctx->selected;
   ctx->selected += delta;
-  clamp_selected(ctx);
+  bool wrapped = false;
+  if (ctx->config.list_wrap) {
+    if (delta < 0 && prev == 0) {
+      wrapped = true;
+    } else if (delta > 0 && prev == n - 1) {
+      wrapped = true;
+    }
+    wrap_selected(ctx);
+  } else {
+    clamp_selected(ctx);
+  }
+  if (wrapped) {
+    ctx->list_scroll_init_done = false;
+  }
   ctx->list_scroll_anim_px -= (double)delta * 9.0;
   if (ctx->list_scroll_anim_px > 20.0) {
     ctx->list_scroll_anim_px = 20.0;

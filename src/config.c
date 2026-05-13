@@ -85,6 +85,8 @@ void br_config_init_defaults(BrConfig *c) {
   c->col_dim = 0xccaaaaaau;
   c->col_border = 0x88444444u;
   c->col_row_sel = 0x55333355u;
+  c->list_wrap = true;
+  c->invert_list_wheel = true;
   c->bangs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   g_hash_table_insert(c->bangs, g_strdup("g"), g_strdup("https://www.google.com/search?q=%s"));
   g_hash_table_insert(c->bangs, g_strdup("w"), g_strdup("https://en.wikipedia.org/wiki/Special:Search?search=%s"));
@@ -169,6 +171,17 @@ void br_config_load(BrConfig *c) {
     col = g_key_file_get_string(kf, "ui", "row_selected", NULL);
     c->col_row_sel = parse_color(col, c->col_row_sel);
     g_free(col);
+    GError *be = NULL;
+    gboolean lw = g_key_file_get_boolean(kf, "ui", "list_wrap", &be);
+    if (!be) {
+      c->list_wrap = lw;
+    }
+    g_clear_error(&be);
+    gboolean inv = g_key_file_get_boolean(kf, "ui", "invert_list_wheel", &be);
+    if (!be) {
+      c->invert_list_wheel = inv;
+    }
+    g_clear_error(&be);
   }
 
   if (g_key_file_has_group(kf, "files")) {
