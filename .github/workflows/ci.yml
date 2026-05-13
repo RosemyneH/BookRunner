@@ -56,21 +56,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Snapshot tag name
+      - name: Snapshot tag and package version
         id: snap
         run: |
           ver=$(python3 -c "import re; m=re.search(r\"version:\\s*'([^']+)'\", open('meson.build',encoding='utf-8').read()); print(m.group(1) if m else '0.0.0')")
           tag="snapshot-${ver}-ci.${GITHUB_RUN_ID}"
+          pkgver="${ver}-ci.${GITHUB_RUN_ID}"
           echo "version=${ver}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "Will create ${tag} at ${GITHUB_SHA}"
+          echo "pkgver=${pkgver}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag} pkgver=${pkgver} at ${GITHUB_SHA}"
 
-      - name: Create GitHub Release (and tag)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install packaging dependencies
         run: |
-          gh release create "${{ steps.snap.outputs.tag }}" \
-            --target "${{ github.sha }}" \
-            --title "Snapshot ${{ steps.snap.outputs.version }} (${{ github.run_id }})" \
-            --prerelease \
-            --generate-notes
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            meson ninja-build pkg-config rpm file zstd wget curl \
+            libwayland-dev wayland-protocols \
+            libcairo2-dev libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev libglib2.0-dev libsqlite3-dev libxkbcommon-dev \
+            librsvg2-bin
+
+      - name: Build .deb, .rpm, AppImage
+        run: ./scripts/ci_package_linux.sh "${{ steps.snap.outputs.pkgver }}"
+
+      - name: Publish snapshot release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.snap.outputs.tag }}
+          name: Snapshot ${{ steps.snap.outputs.version }} (${{ github.run_id }})
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+            dist/SHA256SUMS
+          generate_release_notes: true

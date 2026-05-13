@@ -15,7 +15,7 @@ BookRunner is a **Wayland** application launcher built on **wlr-layer-shell**. I
 
 ### From GitHub Releases
 
-**Snapshot builds:** every push to `main` / `master` that passes [CI](.github/workflows/ci.yml) creates a **prerelease** named like `snapshot-0.1.0-ci.<run_id>` with auto-generated notes (no `.deb` / AppImage on that job). The repository must allow **Workflow permissions → Read and write** (Settings → Actions → General) so the default `GITHUB_TOKEN` can create tags and releases.
+**Snapshot builds:** every push to `main` / `master` that passes [CI](.github/workflows/ci.yml) creates a **prerelease** tagged like `snapshot-0.1.0-ci.<run_id>` with **.deb**, **.rpm**, **AppImage**, **SHA256SUMS**, and auto-generated notes (same artifacts as stable releases). The repository must allow **Workflow permissions → Read and write** (Settings → Actions → General) so the default `GITHUB_TOKEN` can create tags and releases.
 
 **Stable artifacts:** pushing a **SemVer tag** matching `v*` (for example `v0.2.0`) runs the [Release workflow](.github/workflows/release.yml) and attaches:
 
@@ -97,9 +97,9 @@ Issues and pull requests are welcome. Use the [bug report](.github/ISSUE_TEMPLAT
 
 ## Releasing (maintainers)
 
-**Continuous snapshots** are created automatically on each successful push to `main` / `master` (see CI workflow).
+**Continuous snapshots** attach Linux packages on each successful push to `main` / `master` (see CI workflow).
 
-For **installable packages** (.deb, .rpm, AppImage):
+For a **stable** release with the same artifacts:
 
 1. Bump `version` in `meson.build` if needed.
 2. Create and push a tag: `git tag v0.2.0 && git push origin v0.2.0`
