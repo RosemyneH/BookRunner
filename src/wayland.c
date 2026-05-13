@@ -403,6 +403,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer, uin
       ctx->selected = row;
       ctx->sel_pulse = 1.0;
       ctx->list_anim_last_ms = 0;
+      ctx->list_scroll_interact_ms = 0;
       bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
       br_btn_prev_time = time;
       br_btn_prev_row = row;

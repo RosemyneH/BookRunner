@@ -133,7 +133,7 @@ typedef struct {
   double y_list;
 } BrUILayout;
 
-static int64_t br_mono_ms(void) {
+int64_t bookrunner_mono_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -185,13 +185,29 @@ void bookrunner_list_ensure_scroll(AppContext *ctx, int width, int height) {
     ctx->list_first_visible = 0;
     return;
   }
-  if (ctx->selected < ctx->list_first_visible) {
-    ctx->list_first_visible = ctx->selected;
-  }
-  if (ctx->selected >= ctx->list_first_visible + visible) {
-    ctx->list_first_visible = ctx->selected - visible + 1;
-  }
   int max_first = n - visible;
+  int64_t now = bookrunner_mono_ms();
+  int fast = ctx->list_scroll_interact_ms != 0 && (now - ctx->list_scroll_interact_ms) < 100;
+  if (fast) {
+    if (ctx->selected < ctx->list_first_visible) {
+      ctx->list_first_visible = ctx->selected;
+    }
+    if (ctx->selected >= ctx->list_first_visible + visible) {
+      ctx->list_first_visible = ctx->selected - visible + 1;
+    }
+  } else {
+    int goal = ctx->selected - visible / 2;
+    if (goal < 0) {
+      goal = 0;
+    }
+    if (goal > max_first) {
+      goal = max_first;
+    }
+    if (goal != ctx->list_first_visible) {
+      ctx->list_recenter_px += (double)(ctx->list_first_visible - goal) * row_h;
+      ctx->list_first_visible = goal;
+    }
+  }
   if (ctx->list_first_visible < 0) {
     ctx->list_first_visible = 0;
   }
@@ -201,40 +217,44 @@ void bookrunner_list_ensure_scroll(AppContext *ctx, int width, int height) {
 }
 
 bool bookrunner_list_anim_pending(const AppContext *ctx) {
-  return fabs(ctx->list_scroll_anim_px) > 0.02 || ctx->sel_pulse > 0.02;
+  return fabs(ctx->list_scroll_anim_px) > 0.02 || ctx->sel_pulse > 0.02 || fabs(ctx->list_recenter_px) > 0.08;
 }
 
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   (void)width;
   (void)height;
+  if (ctx->list_anim_last_ms == 0) {
+    ctx->list_anim_last_ms = bookrunner_mono_ms();
+  } else {
+    int64_t now = bookrunner_mono_ms();
+    double dt = ((double)(now - ctx->list_anim_last_ms)) / 1000.0;
+    if (dt > 0) {
+      if (dt > 1.0 / 60.0) {
+        dt = 1.0 / 60.0;
+      }
+      ctx->list_anim_last_ms = now;
+      if (fabs(ctx->list_scroll_anim_px) > 0.25) {
+        ctx->list_scroll_anim_px *= exp(-dt * 18.0);
+      } else {
+        ctx->list_scroll_anim_px = 0;
+      }
+      if (ctx->sel_pulse > 0.03) {
+        ctx->sel_pulse *= exp(-dt * 11.0);
+      } else {
+        ctx->sel_pulse = 0;
+      }
+      if (fabs(ctx->list_recenter_px) > 0.35) {
+        ctx->list_recenter_px *= exp(-dt * 24.0);
+      } else {
+        ctx->list_recenter_px = 0;
+      }
+    }
+  }
   if (!bookrunner_list_anim_pending(ctx)) {
     ctx->list_anim_last_ms = 0;
     ctx->list_scroll_anim_px = 0;
     ctx->sel_pulse = 0;
-    return;
-  }
-  if (ctx->list_anim_last_ms == 0) {
-    ctx->list_anim_last_ms = br_mono_ms();
-    return;
-  }
-  int64_t now = br_mono_ms();
-  double dt = ((double)(now - ctx->list_anim_last_ms)) / 1000.0;
-  if (dt <= 0) {
-    return;
-  }
-  if (dt > 1.0 / 60.0) {
-    dt = 1.0 / 60.0;
-  }
-  ctx->list_anim_last_ms = now;
-  if (fabs(ctx->list_scroll_anim_px) > 0.25) {
-    ctx->list_scroll_anim_px *= exp(-dt * 18.0);
-  } else {
-    ctx->list_scroll_anim_px = 0;
-  }
-  if (ctx->sel_pulse > 0.03) {
-    ctx->sel_pulse *= exp(-dt * 11.0);
-  } else {
-    ctx->sel_pulse = 0;
+    ctx->list_recenter_px = 0;
   }
 }
 
@@ -281,7 +301,8 @@ bool bookrunner_pointer_pick_row(AppContext *ctx, int width, int height, double 
   if (py < y_list || py > y_list + list_h) {
     return false;
   }
-  int local = (int)floor((py - y_list - ctx->list_scroll_anim_px) / row_h);
+  const double list_y_off = ctx->list_scroll_anim_px + ctx->list_recenter_px;
+  int local = (int)floor((py - y_list - list_y_off) / row_h);
   if (local < 0) {
     return false;
   }
@@ -296,6 +317,9 @@ bool bookrunner_pointer_pick_row(AppContext *ctx, int width, int height, double 
 void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   const BrConfig *cfg = &ctx->config;
   bookrunner_list_anim_step(ctx, width, height);
+  if (width > 0 && height > 0) {
+    bookrunner_list_ensure_scroll(ctx, width, height);
+  }
   cairo_save(cr);
   cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
   cairo_set_source_rgba(cr, 0, 0, 0, 0);
@@ -374,8 +398,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   cairo_save(cr);
   cairo_rectangle(cr, u.x0 - 4, y_list, u.inner_w - 2, list_h);
   cairo_clip(cr);
+  const double list_y_off = ctx->list_scroll_anim_px + ctx->list_recenter_px;
   for (int i = ctx->list_first_visible; i < n; i++) {
-    double ry = y_list + (double)(i - ctx->list_first_visible) * row_h + ctx->list_scroll_anim_px;
+    double ry = y_list + (double)(i - ctx->list_first_visible) * row_h + list_y_off;
     if (ry > y_list + list_h) {
       break;
     }
