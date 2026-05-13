@@ -408,7 +408,7 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   if (!kw) {
     return;
   }
-  if (strcmp(kw, "set") == 0) {
+  if (g_ascii_strcasecmp(kw, "set") == 0) {
     add_set_rows(ctx);
     return;
   }
@@ -547,7 +547,11 @@ void br_ctx_refilter(AppContext *ctx) {
   g_autofree gchar *tail = NULL;
   if (br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
     g_autofree gchar *kw_fold = g_utf8_strdown(kw, -1);
-    add_bang_rows(ctx, kw_fold, tail);
+    if (kw_fold) {
+      add_bang_rows(ctx, kw_fold, tail);
+    } else {
+      add_bang_rows(ctx, kw, tail);
+    }
   } else {
     add_app_and_file_rows(ctx);
   }
