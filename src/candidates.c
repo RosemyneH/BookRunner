@@ -37,6 +37,59 @@ static int cmp_cstr(const void *a, const void *b) {
   return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
+static const char *bang_kw_label(const char *kw) {
+  if (!kw || !kw[0]) {
+    return "Bang";
+  }
+  if (strcmp(kw, "g") == 0) {
+    return "Google";
+  }
+  if (strcmp(kw, "w") == 0) {
+    return "Wikipedia";
+  }
+  if (strcmp(kw, "yt") == 0) {
+    return "YouTube";
+  }
+  if (strcmp(kw, "f") == 0) {
+    return "Files";
+  }
+  if (strcmp(kw, "set") == 0) {
+    return "Settings";
+  }
+  return kw;
+}
+
+static const char *bang_kw_icon_name(const char *kw) {
+  if (!kw) {
+    return "web-browser";
+  }
+  if (strcmp(kw, "g") == 0) {
+    return "google";
+  }
+  if (strcmp(kw, "w") == 0) {
+    return "wikipedia";
+  }
+  if (strcmp(kw, "yt") == 0) {
+    return "youtube";
+  }
+  if (strcmp(kw, "f") == 0) {
+    return "folder";
+  }
+  if (strcmp(kw, "set") == 0) {
+    return "preferences-desktop";
+  }
+  return "applications-internet";
+}
+
+static void bang_row_set_icon(BrCandidate *c, const char *kw) {
+  GdkPixbuf *pb = br_icon_from_theme(bang_kw_icon_name(kw), 36);
+  c->icon = pb;
+}
+
+static void row_icon_theme(BrCandidate *c, const char *icon_name) {
+  c->icon = br_icon_from_theme(icon_name, 36);
+}
+
 static BrCandidate *alloc_candidate(AppContext *ctx) {
   BrCandidate *c =
       br_arena_alloc(&ctx->candidate_arena, sizeof(BrCandidate), _Alignof(BrCandidate));
@@ -93,29 +146,6 @@ static void wrap_selected(AppContext *ctx) {
   }
 }
 
-static const char *bang_catalog_subtitle(AppContext *ctx, const char *kw, const char *tpl) {
-  gpointer d = g_hash_table_lookup(ctx->config.bang_desc, kw);
-  if (d) {
-    return (const char *)d;
-  }
-  if (strcmp(kw, "set") == 0) {
-    return "Hidden apps, toggles, bang help";
-  }
-  if (strcmp(kw, "f") == 0) {
-    return "File search only (enable under !set)";
-  }
-  if (strcmp(kw, "g") == 0) {
-    return "Google";
-  }
-  if (strcmp(kw, "w") == 0) {
-    return "Wikipedia";
-  }
-  if (strcmp(kw, "yt") == 0) {
-    return "YouTube";
-  }
-  return tpl ? tpl : "";
-}
-
 static void append_file_rows(AppContext *ctx, int cap, int *used) {
   pthread_mutex_lock(&ctx->file_search.mx);
   for (guint i = 0; i < ctx->file_search.paths->len && *used < cap; i++) {
@@ -126,8 +156,9 @@ static void append_file_rows(AppContext *ctx, int cap, int *used) {
     }
     c->kind = BR_CAND_FILE;
     g_autofree gchar *base = g_path_get_basename(path);
-    c->title = br_arena_strdup(&ctx->candidate_arena, base);
-    c->subtitle = br_arena_strdup(&ctx->candidate_arena, path);
+    g_autofree gchar *line = g_strdup_printf("Open > %s", base);
+    c->title = br_arena_strdup(&ctx->candidate_arena, line);
+    c->subtitle = NULL;
     c->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
     c->file_path = br_arena_strdup(&ctx->candidate_arena, path);
     g_ptr_array_add(ctx->candidates, c);
@@ -145,10 +176,10 @@ static void add_f_rows(AppContext *ctx, const char *tail) {
       return;
     }
     c->kind = BR_CAND_BANG;
-    c->title = br_arena_strdup(&ctx->candidate_arena, "!f");
-    c->subtitle = br_arena_strdup(
-        &ctx->candidate_arena, "Add text after !f to search configured file roots.");
+    c->title = br_arena_strdup(&ctx->candidate_arena, "Files >");
+    c->subtitle = NULL;
     c->open_uri = NULL;
+    bang_row_set_icon(c, "f");
     g_ptr_array_add(ctx->candidates, c);
     used++;
     append_file_rows(ctx, cap, &used);
@@ -158,22 +189,18 @@ static void add_f_rows(AppContext *ctx, const char *tail) {
 }
 
 static void add_set_help_bang_row(AppContext *ctx, const char *kw, const char *tpl, int cap, int *used) {
+  (void)tpl;
   if (*used >= cap) {
     return;
-  }
-  const char *gv = g_hash_table_lookup(ctx->config.bangs, kw);
-  if (!gv) {
-    gv = tpl;
   }
   BrCandidate *c = alloc_candidate(ctx);
   if (!c) {
     return;
   }
   c->kind = BR_CAND_BANG;
-  g_autofree gchar *t = g_strdup_printf("!%s", kw);
-  c->title = br_arena_strdup(&ctx->candidate_arena, t);
-  c->subtitle = br_arena_strdup(&ctx->candidate_arena, bang_catalog_subtitle(ctx, kw, gv));
-  c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
+  c->title = br_arena_strdup(&ctx->candidate_arena, bang_kw_label(kw));
+  c->subtitle = NULL;
+  bang_row_set_icon(c, kw);
   c->open_uri = NULL;
   g_ptr_array_add(ctx->candidates, c);
   (*used)++;
@@ -188,10 +215,9 @@ static void add_set_rows(AppContext *ctx) {
   }
   h->kind = BR_CAND_BANG;
   h->title = br_arena_strdup(&ctx->candidate_arena, "Settings");
-  h->subtitle = br_arena_strdup(
-      &ctx->candidate_arena,
-      "Insert on an app hides it. Paths: ~/.local/share/bookrunner/state.ini");
+  h->subtitle = NULL;
   h->open_uri = NULL;
+  row_icon_theme(h, "preferences-desktop");
   g_ptr_array_add(ctx->candidates, h);
   used++;
 
@@ -201,11 +227,11 @@ static void add_set_rows(AppContext *ctx) {
   }
   t->kind = BR_CAND_ACTION;
   t->act = BR_ACT_TOGGLE_BANG_F;
-  t->title = br_arena_strdup(&ctx->candidate_arena, "File-only bang (!f)");
-  t->subtitle = br_arena_strdup(
-      &ctx->candidate_arena,
-      ctx->config.bang_f_enabled ? "Enabled — Enter to disable" : "Disabled — Enter to enable");
-  t->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
+  g_autofree gchar *ft = g_strdup_printf(
+      "Files > %s", ctx->config.bang_f_enabled ? "on" : "off");
+  t->title = br_arena_strdup(&ctx->candidate_arena, ft);
+  t->subtitle = NULL;
+  bang_row_set_icon(t, "f");
   g_ptr_array_add(ctx->candidates, t);
   used++;
 
@@ -214,9 +240,10 @@ static void add_set_rows(AppContext *ctx) {
     return;
   }
   sec->kind = BR_CAND_BANG;
-  sec->title = br_arena_strdup(&ctx->candidate_arena, "Hidden applications");
-  sec->subtitle = br_arena_strdup(&ctx->candidate_arena, "Enter removes from ignore list");
+  sec->title = br_arena_strdup(&ctx->candidate_arena, "Ignored");
+  sec->subtitle = NULL;
   sec->open_uri = NULL;
+  row_icon_theme(sec, "user-trash");
   g_ptr_array_add(ctx->candidates, sec);
   used++;
 
@@ -225,8 +252,9 @@ static void add_set_rows(AppContext *ctx) {
     if (e) {
       e->kind = BR_CAND_BANG;
       e->title = br_arena_strdup(&ctx->candidate_arena, "(none)");
-      e->subtitle = br_arena_strdup(&ctx->candidate_arena, "");
+      e->subtitle = NULL;
       e->open_uri = NULL;
+      row_icon_theme(e, "dialog-question");
       g_ptr_array_add(ctx->candidates, e);
       used++;
     }
@@ -258,9 +286,10 @@ static void add_set_rows(AppContext *ctx) {
       row->kind = BR_CAND_ACTION;
       row->act = BR_ACT_UNIGNORE;
       row->action_id = br_arena_strdup(&ctx->candidate_arena, did);
-      row->title = br_arena_strdup(&ctx->candidate_arena, dname);
-      row->subtitle = br_arena_strdup(&ctx->candidate_arena, did);
-      row->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
+      g_autofree gchar *rt = g_strdup_printf("%s > restore", dname);
+      row->title = br_arena_strdup(&ctx->candidate_arena, rt);
+      row->subtitle = NULL;
+      row_icon_theme(row, "edit-undo");
       g_ptr_array_add(ctx->candidates, row);
       used++;
     }
@@ -272,9 +301,10 @@ static void add_set_rows(AppContext *ctx) {
     return;
   }
   bsec->kind = BR_CAND_BANG;
-  bsec->title = br_arena_strdup(&ctx->candidate_arena, "Bang reference");
-  bsec->subtitle = br_arena_strdup(&ctx->candidate_arena, "Enter does nothing here — use from the main prompt");
+  bsec->title = br_arena_strdup(&ctx->candidate_arena, "Commands");
+  bsec->subtitle = NULL;
   bsec->open_uri = NULL;
+  row_icon_theme(bsec, "help-browser");
   g_ptr_array_add(ctx->candidates, bsec);
   used++;
 
@@ -359,10 +389,9 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
         break;
       }
       c->kind = BR_CAND_BANG;
-      g_autofree gchar *t = g_strdup_printf("!%s", key);
-      c->title = br_arena_strdup(&ctx->candidate_arena, t);
-      c->subtitle = br_arena_strdup(&ctx->candidate_arena, bang_catalog_subtitle(ctx, key, val));
-      c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
+      c->title = br_arena_strdup(&ctx->candidate_arena, bang_kw_label(key));
+      c->subtitle = NULL;
+      bang_row_set_icon(c, key);
       g_autofree gchar *ou = br_bang_build_url(val, "");
       c->open_uri = br_arena_strdup(&ctx->candidate_arena, ou ? ou : "");
       g_ptr_array_add(ctx->candidates, c);
@@ -378,9 +407,10 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
       return;
     }
     c->kind = BR_CAND_BANG;
-    c->title = br_arena_strdup(&ctx->candidate_arena, "Unknown bang");
-    c->subtitle = br_arena_strdup(&ctx->candidate_arena, kw);
-    c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
+    g_autofree gchar *unk = g_strdup_printf("Unknown > %s", kw);
+    c->title = br_arena_strdup(&ctx->candidate_arena, unk);
+    c->subtitle = NULL;
+    row_icon_theme(c, "dialog-warning");
     g_ptr_array_add(ctx->candidates, c);
     return;
   }
@@ -390,11 +420,16 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     return;
   }
   c->kind = BR_CAND_BANG;
-  g_autofree gchar *title = g_strdup_printf("!%s", kw);
-  c->title = br_arena_strdup(&ctx->candidate_arena, title);
-  c->subtitle = br_arena_strdup(
-      &ctx->candidate_arena, tail && *tail ? tail : uri);
-  c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
+  const char *lab = bang_kw_label(kw);
+  g_autofree gchar *line = NULL;
+  if (tail && tail[0]) {
+    line = g_strdup_printf("%s > %s", lab, tail);
+  } else {
+    line = g_strdup(lab);
+  }
+  c->title = br_arena_strdup(&ctx->candidate_arena, line);
+  c->subtitle = NULL;
+  bang_row_set_icon(c, kw);
   c->open_uri = br_arena_strdup(&ctx->candidate_arena, uri);
   g_ptr_array_add(ctx->candidates, c);
 }
@@ -418,8 +453,7 @@ static void add_app_and_file_rows(AppContext *ctx) {
     c->kind = BR_CAND_APP;
     c->title = br_arena_strdup(
         &ctx->candidate_arena, g_app_info_get_display_name(G_APP_INFO(e->info)));
-    c->subtitle =
-        br_arena_strdup(&ctx->candidate_arena, g_app_info_get_name(G_APP_INFO(e->info)));
+    c->subtitle = NULL;
     c->app_index = (guint)idx[i];
     g_ptr_array_add(ctx->candidates, c);
     used++;

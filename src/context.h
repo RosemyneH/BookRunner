@@ -62,7 +62,6 @@ struct AppContext {
   BrFileSearch file_search;
 
   GdkPixbuf *icon_file;
-  GdkPixbuf *icon_bang;
 
   struct wl_display *display;
   struct wl_compositor *compositor;
