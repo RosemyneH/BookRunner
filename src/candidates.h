@@ -25,8 +25,6 @@ struct BrCandidate {
   char *file_path;
 };
 
-void br_candidate_free(BrCandidate *c);
-
 void br_ctx_refilter(AppContext *ctx);
 void br_ctx_select_move(AppContext *ctx, int delta);
 void br_ctx_activate(AppContext *ctx);
