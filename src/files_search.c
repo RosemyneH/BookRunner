@@ -24,6 +24,23 @@ static int64_t now_ms(void) {
   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t buflen) {
+  g_autofree gchar *kw = NULL;
+  g_autofree gchar *tail = NULL;
+  if (!br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
+    g_strlcpy(buf, ctx->query, buflen);
+    return TRUE;
+  }
+  if (g_strcmp0(kw, "set") == 0) {
+    return FALSE;
+  }
+  if (ctx->config.bang_f_enabled && g_strcmp0(kw, "f") == 0) {
+    g_strlcpy(buf, tail ? tail : "", buflen);
+    return TRUE;
+  }
+  return FALSE;
+}
+
 static GStrv run_fd_subprocess(const AppContext *ctx, const char *q, GError **err) {
   const BrConfig *cfg = &ctx->config;
   if (!q || !*q) {
@@ -181,11 +198,11 @@ void br_file_search_fini(BrFileSearch *fs) {
 
 void br_file_search_on_query_changed(AppContext *ctx) {
   BrFileSearch *fs = &ctx->file_search;
-  g_autofree gchar *kw = NULL;
-  g_autofree gchar *tail = NULL;
-  if (br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
+  char eff[BR_MAX_QUERY];
+  if (!br_file_search_effective_query(ctx, eff, sizeof eff)) {
     pthread_mutex_lock(&fs->mx);
     fs->want_search = false;
+    g_ptr_array_remove_range(fs->paths, 0, fs->paths->len);
     pthread_mutex_unlock(&fs->mx);
     return;
   }
@@ -198,9 +215,8 @@ void br_file_search_on_query_changed(AppContext *ctx) {
 
 void br_file_search_poll(AppContext *ctx) {
   BrFileSearch *fs = &ctx->file_search;
-  g_autofree gchar *kw = NULL;
-  g_autofree gchar *tail = NULL;
-  if (br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
+  char eff[BR_MAX_QUERY];
+  if (!br_file_search_effective_query(ctx, eff, sizeof eff)) {
     return;
   }
   pthread_mutex_lock(&fs->mx);
@@ -225,7 +241,7 @@ void br_file_search_poll(AppContext *ctx) {
   BrFileJob *job = g_new0(BrFileJob, 1);
   job->ctx = ctx;
   job->gen = g;
-  g_strlcpy(job->query, ctx->query, sizeof(job->query));
+  g_strlcpy(job->query, eff, sizeof(job->query));
 
   pthread_t tid;
   if (pthread_create(&tid, NULL, br_file_worker, job) != 0) {

@@ -366,6 +366,8 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   if (sel && sel->kind == BR_CAND_APP) {
     AppEntry *e = g_ptr_array_index(ctx->apps, sel->app_index);
     hero_pb = app_entry_icon(e);
+  } else if (sel && sel->kind != BR_CAND_APP) {
+    hero_pb = sel->icon;
   }
 
   double cx = width * 0.5;
@@ -407,6 +409,12 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   PangoFontDescription *rfd = pango_font_description_from_string(cfg->font);
   pango_font_description_set_absolute_size(rfd, (int)(cfg->font_size * PANGO_SCALE * 1.12));
   pango_layout_set_font_description(rlo, rfd);
+
+  PangoLayout *rlo_sub = pango_cairo_create_layout(cr);
+  PangoFontDescription *rfd_sub = pango_font_description_from_string(cfg->font);
+  pango_font_description_set_absolute_size(
+      rfd_sub, (int)(cfg->font_size * PANGO_SCALE * 1.12 * 0.88));
+  pango_layout_set_font_description(rlo_sub, rfd_sub);
 
   double y_list, list_h, row_h;
   int visible_slots;
@@ -458,6 +466,17 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
       draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
       draw_text_shadowed(cr, rlo, text_x, ry + text_pad_y, cfg->col_text);
+      if (c->subtitle && c->subtitle[0] && c->kind != BR_CAND_APP) {
+        int maxw = (int)((u.inner_w - (text_x - u.x0) - 10) * PANGO_SCALE);
+        if (maxw < (int)(10 * PANGO_SCALE)) {
+          maxw = (int)(10 * PANGO_SCALE);
+        }
+        pango_layout_set_width(rlo_sub, maxw);
+        pango_layout_set_ellipsize(rlo_sub, PANGO_ELLIPSIZE_END);
+        pango_layout_set_text(rlo_sub, c->subtitle, -1);
+        draw_text_shadowed(
+            cr, rlo_sub, text_x, ry + text_pad_y + cfg->font_size * 1.08, cfg->col_dim);
+      }
     }
   } else {
     int i0 = 0;
@@ -492,6 +511,17 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
       draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
       draw_text_shadowed(cr, rlo, text_x, ry + text_pad_y, cfg->col_text);
+      if (c->subtitle && c->subtitle[0] && c->kind != BR_CAND_APP) {
+        int maxw = (int)((u.inner_w - (text_x - u.x0) - 10) * PANGO_SCALE);
+        if (maxw < (int)(10 * PANGO_SCALE)) {
+          maxw = (int)(10 * PANGO_SCALE);
+        }
+        pango_layout_set_width(rlo_sub, maxw);
+        pango_layout_set_ellipsize(rlo_sub, PANGO_ELLIPSIZE_END);
+        pango_layout_set_text(rlo_sub, c->subtitle, -1);
+        draw_text_shadowed(
+            cr, rlo_sub, text_x, ry + text_pad_y + cfg->font_size * 1.08, cfg->col_dim);
+      }
     }
   }
   cairo_restore(cr);
@@ -523,6 +553,8 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
     cairo_restore(cr);
   }
 
+  pango_font_description_free(rfd_sub);
+  g_object_unref(rlo_sub);
   pango_font_description_free(rfd);
   g_object_unref(rlo);
 }

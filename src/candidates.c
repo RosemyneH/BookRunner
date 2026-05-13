@@ -2,6 +2,7 @@
 
 #include "apps.h"
 #include "bangs.h"
+#include "br_state.h"
 #include "context.h"
 #include "render.h"
 #include "usage_db.h"
@@ -30,6 +31,10 @@ static int cmp_app_indices(const void *a, const void *b, void *userdata) {
   const char *na = g_app_info_get_display_name(G_APP_INFO(ea->info));
   const char *nb = g_app_info_get_display_name(G_APP_INFO(eb->info));
   return g_utf8_collate(na ? na : "", nb ? nb : "");
+}
+
+static int cmp_cstr(const void *a, const void *b) {
+  return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
 static BrCandidate *alloc_candidate(AppContext *ctx) {
@@ -88,31 +93,282 @@ static void wrap_selected(AppContext *ctx) {
   }
 }
 
+static const char *bang_catalog_subtitle(AppContext *ctx, const char *kw, const char *tpl) {
+  gpointer d = g_hash_table_lookup(ctx->config.bang_desc, kw);
+  if (d) {
+    return (const char *)d;
+  }
+  if (strcmp(kw, "set") == 0) {
+    return "Hidden apps, toggles, bang help";
+  }
+  if (strcmp(kw, "f") == 0) {
+    return "File search only (enable under !set)";
+  }
+  if (strcmp(kw, "g") == 0) {
+    return "Google";
+  }
+  if (strcmp(kw, "w") == 0) {
+    return "Wikipedia";
+  }
+  if (strcmp(kw, "yt") == 0) {
+    return "YouTube";
+  }
+  return tpl ? tpl : "";
+}
+
+static void append_file_rows(AppContext *ctx, int cap, int *used) {
+  pthread_mutex_lock(&ctx->file_search.mx);
+  for (guint i = 0; i < ctx->file_search.paths->len && *used < cap; i++) {
+    const char *path = g_ptr_array_index(ctx->file_search.paths, i);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      break;
+    }
+    c->kind = BR_CAND_FILE;
+    g_autofree gchar *base = g_path_get_basename(path);
+    c->title = br_arena_strdup(&ctx->candidate_arena, base);
+    c->subtitle = br_arena_strdup(&ctx->candidate_arena, path);
+    c->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
+    c->file_path = br_arena_strdup(&ctx->candidate_arena, path);
+    g_ptr_array_add(ctx->candidates, c);
+    (*used)++;
+  }
+  pthread_mutex_unlock(&ctx->file_search.mx);
+}
+
+static void add_f_rows(AppContext *ctx, const char *tail) {
+  int cap = ctx->config.max_visible_rows;
+  int used = 0;
+  if (!tail || !*tail) {
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      return;
+    }
+    c->kind = BR_CAND_BANG;
+    c->title = br_arena_strdup(&ctx->candidate_arena, "!f");
+    c->subtitle = br_arena_strdup(
+        &ctx->candidate_arena, "Add text after !f to search configured file roots.");
+    c->open_uri = NULL;
+    g_ptr_array_add(ctx->candidates, c);
+    used++;
+    append_file_rows(ctx, cap, &used);
+    return;
+  }
+  append_file_rows(ctx, cap, &used);
+}
+
+static void add_set_help_bang_row(AppContext *ctx, const char *kw, const char *tpl, int cap, int *used) {
+  if (*used >= cap) {
+    return;
+  }
+  const char *gv = g_hash_table_lookup(ctx->config.bangs, kw);
+  if (!gv) {
+    gv = tpl;
+  }
+  BrCandidate *c = alloc_candidate(ctx);
+  if (!c) {
+    return;
+  }
+  c->kind = BR_CAND_BANG;
+  g_autofree gchar *t = g_strdup_printf("!%s", kw);
+  c->title = br_arena_strdup(&ctx->candidate_arena, t);
+  c->subtitle = br_arena_strdup(&ctx->candidate_arena, bang_catalog_subtitle(ctx, kw, gv));
+  c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
+  c->open_uri = NULL;
+  g_ptr_array_add(ctx->candidates, c);
+  (*used)++;
+}
+
+static void add_set_rows(AppContext *ctx) {
+  int cap = ctx->config.max_visible_rows;
+  int used = 0;
+  BrCandidate *h = alloc_candidate(ctx);
+  if (!h) {
+    return;
+  }
+  h->kind = BR_CAND_BANG;
+  h->title = br_arena_strdup(&ctx->candidate_arena, "Settings");
+  h->subtitle = br_arena_strdup(
+      &ctx->candidate_arena,
+      "Insert on an app hides it. Paths: ~/.local/share/bookrunner/state.ini");
+  h->open_uri = NULL;
+  g_ptr_array_add(ctx->candidates, h);
+  used++;
+
+  BrCandidate *t = alloc_candidate(ctx);
+  if (!t) {
+    return;
+  }
+  t->kind = BR_CAND_ACTION;
+  t->act = BR_ACT_TOGGLE_BANG_F;
+  t->title = br_arena_strdup(&ctx->candidate_arena, "File-only bang (!f)");
+  t->subtitle = br_arena_strdup(
+      &ctx->candidate_arena,
+      ctx->config.bang_f_enabled ? "Enabled — Enter to disable" : "Disabled — Enter to enable");
+  t->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
+  g_ptr_array_add(ctx->candidates, t);
+  used++;
+
+  BrCandidate *sec = alloc_candidate(ctx);
+  if (!sec) {
+    return;
+  }
+  sec->kind = BR_CAND_BANG;
+  sec->title = br_arena_strdup(&ctx->candidate_arena, "Hidden applications");
+  sec->subtitle = br_arena_strdup(&ctx->candidate_arena, "Enter removes from ignore list");
+  sec->open_uri = NULL;
+  g_ptr_array_add(ctx->candidates, sec);
+  used++;
+
+  if (g_hash_table_size(ctx->config.ignored_apps) == 0) {
+    BrCandidate *e = alloc_candidate(ctx);
+    if (e) {
+      e->kind = BR_CAND_BANG;
+      e->title = br_arena_strdup(&ctx->candidate_arena, "(none)");
+      e->subtitle = br_arena_strdup(&ctx->candidate_arena, "");
+      e->open_uri = NULL;
+      g_ptr_array_add(ctx->candidates, e);
+      used++;
+    }
+  } else {
+    GPtrArray *ids = g_ptr_array_new_with_free_func(g_free);
+    GHashTableIter it;
+    gpointer k, v;
+    g_hash_table_iter_init(&it, ctx->config.ignored_apps);
+    while (g_hash_table_iter_next(&it, &k, &v)) {
+      (void)v;
+      g_ptr_array_add(ids, g_strdup((char *)k));
+    }
+    g_ptr_array_sort(ids, cmp_cstr);
+    for (guint i = 0; i < ids->len && used < cap; i++) {
+      const char *did = g_ptr_array_index(ids, i);
+      const char *dname = did;
+      for (guint j = 0; j < ctx->apps->len; j++) {
+        AppEntry *ae = g_ptr_array_index(ctx->apps, j);
+        const char *id = g_app_info_get_id(G_APP_INFO(ae->info));
+        if (id && strcmp(id, did) == 0) {
+          dname = g_app_info_get_display_name(G_APP_INFO(ae->info));
+          break;
+        }
+      }
+      BrCandidate *row = alloc_candidate(ctx);
+      if (!row) {
+        break;
+      }
+      row->kind = BR_CAND_ACTION;
+      row->act = BR_ACT_UNIGNORE;
+      row->action_id = br_arena_strdup(&ctx->candidate_arena, did);
+      row->title = br_arena_strdup(&ctx->candidate_arena, dname);
+      row->subtitle = br_arena_strdup(&ctx->candidate_arena, did);
+      row->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
+      g_ptr_array_add(ctx->candidates, row);
+      used++;
+    }
+    g_ptr_array_unref(ids);
+  }
+
+  BrCandidate *bsec = alloc_candidate(ctx);
+  if (!bsec) {
+    return;
+  }
+  bsec->kind = BR_CAND_BANG;
+  bsec->title = br_arena_strdup(&ctx->candidate_arena, "Bang reference");
+  bsec->subtitle = br_arena_strdup(&ctx->candidate_arena, "Enter does nothing here — use from the main prompt");
+  bsec->open_uri = NULL;
+  g_ptr_array_add(ctx->candidates, bsec);
+  used++;
+
+  add_set_help_bang_row(ctx, "set", "", cap, &used);
+  if (ctx->config.bang_f_enabled && !g_hash_table_contains(ctx->config.bangs, "f")) {
+    add_set_help_bang_row(ctx, "f", "", cap, &used);
+  }
+  add_set_help_bang_row(ctx, "g", "https://www.google.com/search?q=%s", cap, &used);
+  add_set_help_bang_row(ctx, "w", "https://en.wikipedia.org/wiki/Special:Search?search=%s", cap, &used);
+  add_set_help_bang_row(ctx, "yt", "https://www.youtube.com/results?search_query=%s", cap, &used);
+
+  GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
+  GHashTableIter bit;
+  gpointer gk, gv;
+  g_hash_table_iter_init(&bit, ctx->config.bangs);
+  while (g_hash_table_iter_next(&bit, &gk, &gv)) {
+    const char *key = (const char *)gk;
+    if (strcmp(key, "g") == 0 || strcmp(key, "w") == 0 || strcmp(key, "yt") == 0) {
+      continue;
+    }
+    if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
+      continue;
+    }
+    g_ptr_array_add(keys, g_strdup(key));
+  }
+  g_ptr_array_sort(keys, cmp_cstr);
+  for (guint i = 0; i < keys->len && used < cap; i++) {
+    const char *key = g_ptr_array_index(keys, i);
+    if (strcmp(key, "set") == 0) {
+      continue;
+    }
+    const char *tpl = g_hash_table_lookup(ctx->config.bangs, key);
+    add_set_help_bang_row(ctx, key, tpl ? tpl : "", cap, &used);
+  }
+  g_ptr_array_unref(keys);
+}
+
 static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   if (!kw) {
     return;
   }
+  if (strcmp(kw, "set") == 0) {
+    add_set_rows(ctx);
+    return;
+  }
+  if (ctx->config.bang_f_enabled && strcmp(kw, "f") == 0) {
+    add_f_rows(ctx, tail);
+    return;
+  }
   if (!*kw) {
+    GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
     GHashTableIter it;
     gpointer gk, gv;
     g_hash_table_iter_init(&it, ctx->config.bangs);
+    while (g_hash_table_iter_next(&it, &gk, &gv)) {
+      const char *key = (const char *)gk;
+      if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
+        continue;
+      }
+      g_ptr_array_add(keys, g_strdup(key));
+    }
+    if (ctx->config.bang_f_enabled && !g_hash_table_contains(ctx->config.bangs, "f")) {
+      g_ptr_array_add(keys, g_strdup("f"));
+    }
+    if (!g_hash_table_contains(ctx->config.bangs, "set")) {
+      g_ptr_array_add(keys, g_strdup("set"));
+    }
+    g_ptr_array_sort(keys, cmp_cstr);
     int cap = ctx->config.max_visible_rows;
     int n = 0;
-    while (g_hash_table_iter_next(&it, &gk, &gv) && n < cap) {
+    for (guint i = 0; i < keys->len && n < cap; i++) {
+      const char *key = g_ptr_array_index(keys, i);
+      const char *val = g_hash_table_lookup(ctx->config.bangs, key);
+      if (strcmp(key, "f") == 0 && ctx->config.bang_f_enabled && !val) {
+        val = "";
+      }
+      if (!val) {
+        continue;
+      }
       BrCandidate *c = alloc_candidate(ctx);
       if (!c) {
         break;
       }
       c->kind = BR_CAND_BANG;
-      g_autofree gchar *t = g_strdup_printf("!%s", (char *)gk);
+      g_autofree gchar *t = g_strdup_printf("!%s", key);
       c->title = br_arena_strdup(&ctx->candidate_arena, t);
-      c->subtitle = br_arena_strdup(&ctx->candidate_arena, (char *)gv);
+      c->subtitle = br_arena_strdup(&ctx->candidate_arena, bang_catalog_subtitle(ctx, key, val));
       c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
-      g_autofree gchar *ou = br_bang_build_url((char *)gv, "");
-      c->open_uri = br_arena_strdup(&ctx->candidate_arena, ou);
+      g_autofree gchar *ou = br_bang_build_url(val, "");
+      c->open_uri = br_arena_strdup(&ctx->candidate_arena, ou ? ou : "");
       g_ptr_array_add(ctx->candidates, c);
       n++;
     }
+    g_ptr_array_unref(keys);
     return;
   }
   const char *tpl = g_hash_table_lookup(ctx->config.bangs, kw);
@@ -146,7 +402,7 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
 static void add_app_and_file_rows(AppContext *ctx) {
   gint *idx = NULL;
   int nidx = 0;
-  apps_filter_indices(ctx->apps, ctx->query, &idx, &nidx);
+  apps_filter_indices(ctx->apps, ctx->query, &ctx->config, &idx, &nidx);
   BrAppIdxSortCtx sctx = {.apps = ctx->apps, .usage = ctx->usage_db};
   if (nidx > 1) {
     qsort_r(idx, (size_t)nidx, sizeof idx[0], cmp_app_indices, &sctx);
@@ -170,23 +426,7 @@ static void add_app_and_file_rows(AppContext *ctx) {
   }
   g_free(idx);
 
-  pthread_mutex_lock(&ctx->file_search.mx);
-  for (guint i = 0; i < ctx->file_search.paths->len && used < cap; i++) {
-    const char *path = g_ptr_array_index(ctx->file_search.paths, i);
-    BrCandidate *c = alloc_candidate(ctx);
-    if (!c) {
-      break;
-    }
-    c->kind = BR_CAND_FILE;
-    g_autofree gchar *base = g_path_get_basename(path);
-    c->title = br_arena_strdup(&ctx->candidate_arena, base);
-    c->subtitle = br_arena_strdup(&ctx->candidate_arena, path);
-    c->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
-    c->file_path = br_arena_strdup(&ctx->candidate_arena, path);
-    g_ptr_array_add(ctx->candidates, c);
-    used++;
-  }
-  pthread_mutex_unlock(&ctx->file_search.mx);
+  append_file_rows(ctx, cap, &used);
 }
 
 void br_ctx_refilter(AppContext *ctx) {
@@ -260,6 +500,23 @@ void br_ctx_activate(AppContext *ctx) {
   if (!c) {
     return;
   }
+  if (c->kind == BR_CAND_ACTION) {
+    if (c->act == BR_ACT_TOGGLE_BANG_F) {
+      ctx->config.bang_f_enabled = !ctx->config.bang_f_enabled;
+      br_state_save(&ctx->config);
+      br_ctx_refilter(ctx);
+      br_file_search_on_query_changed(ctx);
+      return;
+    }
+    if (c->act == BR_ACT_UNIGNORE && c->action_id) {
+      g_hash_table_remove(ctx->config.ignored_apps, c->action_id);
+      br_state_save(&ctx->config);
+      br_ctx_refilter(ctx);
+      br_file_search_on_query_changed(ctx);
+      return;
+    }
+    return;
+  }
   if (c->kind == BR_CAND_BANG && (!c->open_uri || !c->open_uri[0])) {
     return;
   }
@@ -288,4 +545,21 @@ void br_ctx_free_launch_fields(AppContext *ctx) {
 
 void br_ctx_candidates_clear(AppContext *ctx) {
   candidates_clear(ctx);
+}
+
+bool br_ctx_ignore_selected_app(AppContext *ctx) {
+  BrCandidate *c = br_ctx_selected(ctx);
+  if (!c || c->kind != BR_CAND_APP) {
+    return false;
+  }
+  AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
+  const char *id = g_app_info_get_id(G_APP_INFO(e->info));
+  if (!id || !id[0]) {
+    return false;
+  }
+  g_hash_table_insert(ctx->config.ignored_apps, g_strdup(id), (gpointer)1);
+  br_state_save(&ctx->config);
+  br_ctx_refilter(ctx);
+  br_file_search_on_query_changed(ctx);
+  return true;
 }

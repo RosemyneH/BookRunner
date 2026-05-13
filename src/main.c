@@ -1,6 +1,8 @@
 #include "context.h"
 #include "single_instance.h"
 
+#include "br_state.h"
+
 #include <gio/gio.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,6 +24,7 @@ int main(void) {
   ctx.instance_listen_fd = instance_listen_fd;
   br_arena_init(&ctx.candidate_arena);
   br_config_load(&ctx.config);
+  br_state_load(&ctx.config);
   ctx.usage_db = br_usage_open();
   ctx.apps = apps_load();
   br_file_search_init(&ctx.file_search);

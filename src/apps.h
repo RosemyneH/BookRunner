@@ -2,6 +2,8 @@
 
 #include <gio/gdesktopappinfo.h>
 #include <gio/gio.h>
+#include "config.h"
+
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 typedef struct AppEntry AppEntry;
@@ -12,7 +14,7 @@ struct AppEntry {
 
 GPtrArray *apps_load(void);
 void apps_free(GPtrArray *apps);
-void apps_filter_indices(const GPtrArray *apps, const char *query, gint **out_indices, int *out_n);
+void apps_filter_indices(const GPtrArray *apps, const char *query, const BrConfig *cfg, gint **out_indices, int *out_n);
 GdkPixbuf *app_entry_icon(AppEntry *e);
 GdkPixbuf *app_load_icon(GDesktopAppInfo *info, int size_px);
 GdkPixbuf *br_stub_icon(const char *hint, int size_px);
