@@ -29,7 +29,6 @@ int main(void) {
   ctx.apps = apps_load();
   br_file_search_init(&ctx.file_search);
   ctx.icon_file = load_icon("text-x-generic");
-  ctx.icon_bang = load_icon("preferences-desktop-web-browser");
   br_ctx_refilter(&ctx);
   br_file_search_on_query_changed(&ctx);
 
@@ -71,7 +70,6 @@ int main(void) {
   br_arena_free(&ctx.candidate_arena);
   br_config_clear(&ctx.config);
   g_clear_object(&ctx.icon_file);
-  g_clear_object(&ctx.icon_bang);
   br_single_instance_release(instance_listen_fd);
   return rc == 0 ? 0 : (rc > 0 ? rc : 1);
 }

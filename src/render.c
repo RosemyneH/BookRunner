@@ -377,6 +377,8 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   PangoFontDescription *fd = pango_font_description_from_string(cfg->font);
   pango_font_description_set_absolute_size(fd, (int)(cfg->font_size * PANGO_SCALE * 1.28));
   pango_layout_set_font_description(title_lo, fd);
+  pango_layout_set_ellipsize(title_lo, PANGO_ELLIPSIZE_END);
+  pango_layout_set_single_paragraph_mode(title_lo, TRUE);
   const char *title = sel && sel->title ? sel->title : "BookRunner";
   pango_layout_set_width(title_lo, (int)(u.inner_w * PANGO_SCALE));
   pango_layout_set_alignment(title_lo, PANGO_ALIGN_CENTER);
