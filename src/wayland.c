@@ -404,7 +404,6 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer, uin
       ctx->sel_pulse = 1.0;
       ctx->list_anim_last_ms = 0;
       ctx->list_scroll_interact_ms = 0;
-      bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
       br_btn_prev_time = time;
       br_btn_prev_row = row;
       br_btn_prev_valid = true;
@@ -435,10 +434,13 @@ static void pointer_handle_axis_source(void *data, struct wl_pointer *wl_pointer
 }
 
 static void pointer_handle_axis_stop(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis) {
-  (void)data;
   (void)wl_pointer;
   (void)time;
-  (void)axis;
+  AppContext *ctx = data;
+  if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+    ctx->list_scroll_interact_ms = 0;
+    ctx->needs_draw = true;
+  }
 }
 
 static void pointer_handle_axis_discrete(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t discrete) {
@@ -530,7 +532,7 @@ static void layer_surface_configure(void *data, struct zwlr_layer_surface_v1 *su
   int h = height ? (int)height : ctx->config.ui_height;
   ctx->surf_width = w;
   ctx->surf_height = h;
-  bookrunner_list_ensure_scroll(ctx, w, h);
+  ctx->list_scroll_init_done = false;
   zwlr_layer_surface_v1_ack_configure(surface, serial);
   ctx->last_serial = serial;
   ctx->needs_draw = true;

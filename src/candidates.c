@@ -190,12 +190,8 @@ void br_ctx_refilter(AppContext *ctx) {
     add_app_and_file_rows(ctx);
   }
   clamp_selected(ctx);
-  ctx->list_first_visible = 0;
-  ctx->list_recenter_px = 0;
+  ctx->list_scroll_init_done = false;
   ctx->list_scroll_interact_ms = 0;
-  if (ctx->surf_width > 0 && ctx->surf_height > 0) {
-    bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
-  }
   ctx->needs_draw = true;
 }
 
@@ -215,9 +211,6 @@ void br_ctx_select_move(AppContext *ctx, int delta) {
   ctx->sel_pulse = 1.0;
   ctx->list_anim_last_ms = 0;
   ctx->list_scroll_interact_ms = bookrunner_mono_ms();
-  if (ctx->surf_width > 0 && ctx->surf_height > 0) {
-    bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
-  }
   ctx->needs_draw = true;
 }
 

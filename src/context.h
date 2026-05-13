@@ -41,9 +41,10 @@ struct AppContext {
   GPtrArray *candidates;
   char query[BR_MAX_QUERY];
   int selected;
-  int list_first_visible;
+  double list_scroll_px;
+  double list_scroll_goal_cached;
   double list_scroll_anim_px;
-  double list_recenter_px;
+  bool list_scroll_init_done;
   double sel_pulse;
   int64_t list_anim_last_ms;
   int64_t list_scroll_interact_ms;
