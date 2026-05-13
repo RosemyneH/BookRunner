@@ -1,0 +1,50 @@
+# Version is substituted in CI: __VERSION__
+name: bookrunner
+arch: amd64
+platform: linux
+version: __VERSION__
+release: "1"
+section: utils
+priority: optional
+maintainer: RosemyneH <noreply@github.com>
+description: |
+  BookRunner is a Wayland layer-shell launcher for applications, files, and bang URLs.
+homepage: https://github.com/RosemyneH/BookRunner
+license: MIT
+vendor: BookRunner
+
+depends:
+  - libc6
+  - libwayland-client0
+  - libwayland-cursor0
+  - libcairo2
+  - libpango-1.0-0
+  - libpangocairo-1.0-0
+  - libgdk-pixbuf-2.0-0
+  - libglib2.0-0
+  - libsqlite3-0
+  - libxkbcommon0
+
+overrides:
+  rpm:
+    depends:
+      - wayland-libs
+      - cairo
+      - pango
+      - gdk-pixbuf2
+      - glib2
+      - sqlite-libs
+      - libxkbcommon
+
+contents:
+  - src: staging/usr/bin/bookrunner
+    dst: /usr/bin/bookrunner
+    file_info:
+      mode: 0755
+  - src: staging/usr/share/applications/bookrunner.desktop
+    dst: /usr/share/applications/bookrunner.desktop
+  - src: staging/usr/share/icons/hicolor/scalable/apps/bookrunner.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/bookrunner.svg
+
+rpm:
+  summary: Wayland layer-shell application launcher

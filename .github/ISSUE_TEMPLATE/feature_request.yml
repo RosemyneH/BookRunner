@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you are solving and the outcome you want. Concrete use cases help a lot.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What limitation or pain point does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like BookRunner to behave? Sketches and prior art in other launchers are welcome.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope (optional)
+      description: Rough areas; leave unchecked if unsure.
+      options:
+        - label: Wayland / layer-shell / input
+        - label: Search, indexing, or file backends
+        - label: UI / layout / theming
+        - label: Packaging or CI
+        - label: Documentation
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

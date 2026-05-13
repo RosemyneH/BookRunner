@@ -98,3 +98,12 @@ executable(
   c_args: ['-D_GNU_SOURCE'],
   install: true,
 )
+
+install_data(
+  'data/bookrunner.desktop',
+  install_dir: get_option('datadir') / 'applications',
+)
+install_data(
+  'data/icons/hicolor/scalable/apps/bookrunner.svg',
+  install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps',
+)

@@ -1,2 +1,6 @@
 /build/
 /build-manual/
+/staging/
+/dist/
+/AppDir/
+*.AppImage
