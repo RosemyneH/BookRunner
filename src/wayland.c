@@ -27,6 +27,10 @@
 
 #define BR_FRAMEBUF_N 3
 
+static int br_wheel_select_delta(const AppContext *ctx, int physical_step) {
+  return ctx->config.invert_list_wheel ? -physical_step : physical_step;
+}
+
 static void br_buffer_release(void *data, struct wl_buffer *buffer) {
   AppContext *ctx = data;
   for (int i = 0; i < BR_FRAMEBUF_N; i++) {
@@ -449,7 +453,7 @@ static void pointer_handle_axis_discrete(void *data, struct wl_pointer *wl_point
   if (axis != WL_POINTER_AXIS_VERTICAL_SCROLL || discrete == 0) {
     return;
   }
-  br_ctx_select_move(ctx, discrete > 0 ? 1 : -1);
+  br_ctx_select_move(ctx, br_wheel_select_delta(ctx, discrete > 0 ? 1 : -1));
 }
 
 static void pointer_handle_axis_value120(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t value120) {
@@ -460,11 +464,11 @@ static void pointer_handle_axis_value120(void *data, struct wl_pointer *wl_point
   }
   ctx->scroll_value120_accum += value120;
   while (ctx->scroll_value120_accum >= 120) {
-    br_ctx_select_move(ctx, 1);
+    br_ctx_select_move(ctx, br_wheel_select_delta(ctx, 1));
     ctx->scroll_value120_accum -= 120;
   }
   while (ctx->scroll_value120_accum <= -120) {
-    br_ctx_select_move(ctx, -1);
+    br_ctx_select_move(ctx, br_wheel_select_delta(ctx, -1));
     ctx->scroll_value120_accum += 120;
   }
 }
