@@ -189,6 +189,9 @@ static void strip_reserved_bang_triggers(BrConfig *c) {
   g_hash_table_remove(c->bangs, "fo");
   g_hash_table_remove(c->bang_desc, "fo");
   g_hash_table_remove(c->bang_icons, "fo");
+  g_hash_table_remove(c->bangs, "q");
+  g_hash_table_remove(c->bang_desc, "q");
+  g_hash_table_remove(c->bang_icons, "q");
 }
 
 void br_config_load(BrConfig *c) {
