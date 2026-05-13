@@ -59,6 +59,17 @@ static const char *bang_kw_label(const char *kw) {
   return kw;
 }
 
+static const char *bang_row_label(AppContext *ctx, const char *kw) {
+  if (!kw || !kw[0]) {
+    return "Bang";
+  }
+  const char *d = g_hash_table_lookup(ctx->config.bang_desc, kw);
+  if (d && d[0]) {
+    return d;
+  }
+  return bang_kw_label(kw);
+}
+
 static const char *bang_kw_icon_name(const char *kw) {
   if (!kw) {
     return "web-browser";
@@ -198,8 +209,9 @@ static void add_set_help_bang_row(AppContext *ctx, const char *kw, const char *t
     return;
   }
   c->kind = BR_CAND_BANG;
-  c->title = br_arena_strdup(&ctx->candidate_arena, bang_kw_label(kw));
+  c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, kw));
   c->subtitle = NULL;
+  c->bang_kw = br_arena_strdup(&ctx->candidate_arena, kw);
   bang_row_set_icon(c, kw);
   c->open_uri = NULL;
   g_ptr_array_add(ctx->candidates, c);
@@ -342,6 +354,65 @@ static void add_set_rows(AppContext *ctx) {
   g_ptr_array_unref(keys);
 }
 
+static void add_bang_prefix_rows(AppContext *ctx, const char *kw) {
+  GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
+  GHashTableIter it;
+  gpointer gk, gv;
+  g_hash_table_iter_init(&it, ctx->config.bangs);
+  while (g_hash_table_iter_next(&it, &gk, &gv)) {
+    const char *key = (const char *)gk;
+    const char *val = (const char *)gv;
+    if (strcmp(key, "set") == 0) {
+      continue;
+    }
+    if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
+      continue;
+    }
+    if (strcmp(key, "f") == 0 && ctx->config.bang_f_enabled && (!val || !val[0])) {
+      /* allow synthetic f */
+    } else if (!val || !val[0]) {
+      continue;
+    }
+    if (!g_str_has_prefix(key, kw)) {
+      continue;
+    }
+    g_ptr_array_add(keys, g_strdup(key));
+  }
+  g_ptr_array_sort(keys, cmp_cstr);
+  int cap = ctx->config.max_visible_rows;
+  if (keys->len == 0) {
+    g_ptr_array_unref(keys);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      return;
+    }
+    c->kind = BR_CAND_BANG;
+    g_autofree gchar *unk = g_strdup_printf("Unknown > %s", kw);
+    c->title = br_arena_strdup(&ctx->candidate_arena, unk);
+    c->subtitle = NULL;
+    row_icon_theme(c, "dialog-warning");
+    g_ptr_array_add(ctx->candidates, c);
+    return;
+  }
+  int n = 0;
+  for (guint i = 0; i < keys->len && n < cap; i++) {
+    const char *key = g_ptr_array_index(keys, i);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      break;
+    }
+    c->kind = BR_CAND_BANG;
+    c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, key));
+    c->subtitle = NULL;
+    c->bang_kw = br_arena_strdup(&ctx->candidate_arena, key);
+    bang_row_set_icon(c, key);
+    c->open_uri = NULL;
+    g_ptr_array_add(ctx->candidates, c);
+    n++;
+  }
+  g_ptr_array_unref(keys);
+}
+
 static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   if (!kw) {
     return;
@@ -389,11 +460,11 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
         break;
       }
       c->kind = BR_CAND_BANG;
-      c->title = br_arena_strdup(&ctx->candidate_arena, bang_kw_label(key));
+      c->title = br_arena_strdup(&ctx->candidate_arena, bang_row_label(ctx, key));
       c->subtitle = NULL;
+      c->bang_kw = br_arena_strdup(&ctx->candidate_arena, key);
       bang_row_set_icon(c, key);
-      g_autofree gchar *ou = br_bang_build_url(val, "");
-      c->open_uri = br_arena_strdup(&ctx->candidate_arena, ou ? ou : "");
+      c->open_uri = NULL;
       g_ptr_array_add(ctx->candidates, c);
       n++;
     }
@@ -402,15 +473,21 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   }
   const char *tpl = g_hash_table_lookup(ctx->config.bangs, kw);
   if (!tpl) {
+    add_bang_prefix_rows(ctx, kw);
+    return;
+  }
+  if (!tail || !*tail) {
     BrCandidate *c = alloc_candidate(ctx);
     if (!c) {
       return;
     }
     c->kind = BR_CAND_BANG;
-    g_autofree gchar *unk = g_strdup_printf("Unknown > %s", kw);
-    c->title = br_arena_strdup(&ctx->candidate_arena, unk);
+    const char *lab = bang_row_label(ctx, kw);
+    c->title = br_arena_strdup(&ctx->candidate_arena, lab);
     c->subtitle = NULL;
-    row_icon_theme(c, "dialog-warning");
+    c->bang_kw = br_arena_strdup(&ctx->candidate_arena, kw);
+    bang_row_set_icon(c, kw);
+    c->open_uri = NULL;
     g_ptr_array_add(ctx->candidates, c);
     return;
   }
@@ -420,13 +497,8 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     return;
   }
   c->kind = BR_CAND_BANG;
-  const char *lab = bang_kw_label(kw);
-  g_autofree gchar *line = NULL;
-  if (tail && tail[0]) {
-    line = g_strdup_printf("%s > %s", lab, tail);
-  } else {
-    line = g_strdup(lab);
-  }
+  const char *lab = bang_row_label(ctx, kw);
+  g_autofree gchar *line = g_strdup_printf("%s > %s", lab, tail);
   c->title = br_arena_strdup(&ctx->candidate_arena, line);
   c->subtitle = NULL;
   bang_row_set_icon(c, kw);
@@ -469,10 +541,22 @@ void br_ctx_refilter(AppContext *ctx) {
   }
   candidates_clear(ctx);
 
+  if (ctx->bang_follow_kw[0]) {
+    if (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0) {
+      add_f_rows(ctx, ctx->bang_follow_q);
+    }
+    clamp_selected(ctx);
+    ctx->list_scroll_init_done = false;
+    ctx->list_scroll_interact_ms = 0;
+    ctx->needs_draw = true;
+    return;
+  }
+
   g_autofree gchar *kw = NULL;
   g_autofree gchar *tail = NULL;
   if (br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
-    add_bang_rows(ctx, kw, tail);
+    g_autofree gchar *kw_fold = g_utf8_strdown(kw, -1);
+    add_bang_rows(ctx, kw_fold, tail);
   } else {
     add_app_and_file_rows(ctx);
   }
@@ -529,6 +613,81 @@ BrCandidate *br_ctx_selected(const AppContext *ctx) {
   return g_ptr_array_index(ctx->candidates, (guint)ctx->selected);
 }
 
+bool br_ctx_bang_followup_active(const AppContext *ctx) {
+  return ctx->bang_follow_kw[0] != '\0';
+}
+
+static void br_ctx_bang_followup_start(AppContext *ctx, const char *kw) {
+  if (!kw || !kw[0]) {
+    return;
+  }
+  g_clear_object(&ctx->bang_follow_icon);
+  g_strlcpy(ctx->bang_follow_kw, kw, sizeof ctx->bang_follow_kw);
+  const char *lab = bang_row_label(ctx, kw);
+  g_strlcpy(ctx->bang_follow_label, lab, sizeof ctx->bang_follow_label);
+  ctx->bang_follow_q[0] = '\0';
+  g_strlcpy(ctx->bang_restore_query, ctx->query, sizeof ctx->bang_restore_query);
+  ctx->query[0] = '\0';
+  ctx->bang_follow_icon = br_icon_from_theme(bang_kw_icon_name(kw), 36);
+  ctx->selected = 0;
+  br_ctx_refilter(ctx);
+  br_file_search_on_query_changed(ctx);
+}
+
+void br_ctx_bang_followup_cancel(AppContext *ctx) {
+  if (!br_ctx_bang_followup_active(ctx)) {
+    return;
+  }
+  g_strlcpy(ctx->query, ctx->bang_restore_query, sizeof ctx->query);
+  g_clear_object(&ctx->bang_follow_icon);
+  ctx->bang_follow_kw[0] = '\0';
+  ctx->bang_follow_q[0] = '\0';
+  ctx->bang_follow_label[0] = '\0';
+  ctx->bang_restore_query[0] = '\0';
+  br_ctx_refilter(ctx);
+  br_file_search_on_query_changed(ctx);
+}
+
+void br_ctx_bang_followup_launch(AppContext *ctx) {
+  if (!br_ctx_bang_followup_active(ctx)) {
+    return;
+  }
+  if (strcmp(ctx->bang_follow_kw, "f") == 0) {
+    return;
+  }
+  const char *tpl = g_hash_table_lookup(ctx->config.bangs, ctx->bang_follow_kw);
+  if (!tpl || !tpl[0]) {
+    return;
+  }
+  g_autofree gchar *uri = br_bang_build_url(tpl, ctx->bang_follow_q);
+  if (!uri) {
+    return;
+  }
+  br_ctx_free_launch_fields(ctx);
+  ctx->launch_uri = g_strdup(uri);
+  g_clear_object(&ctx->bang_follow_icon);
+  ctx->bang_follow_kw[0] = '\0';
+  ctx->bang_follow_q[0] = '\0';
+  ctx->bang_follow_label[0] = '\0';
+  ctx->bang_restore_query[0] = '\0';
+  ctx->done = true;
+  ctx->exit_code = 0;
+}
+
+void br_ctx_submit(AppContext *ctx) {
+  if (br_ctx_bang_followup_active(ctx)) {
+    BrCandidate *c = br_ctx_selected(ctx);
+    if (c && ((c->kind == BR_CAND_FILE && c->file_path) || c->kind == BR_CAND_APP ||
+              (c->kind == BR_CAND_BANG && c->open_uri && c->open_uri[0]))) {
+      br_ctx_activate(ctx);
+      return;
+    }
+    br_ctx_bang_followup_launch(ctx);
+    return;
+  }
+  br_ctx_activate(ctx);
+}
+
 void br_ctx_activate(AppContext *ctx) {
   BrCandidate *c = br_ctx_selected(ctx);
   if (!c) {
@@ -551,17 +710,24 @@ void br_ctx_activate(AppContext *ctx) {
     }
     return;
   }
-  if (c->kind == BR_CAND_BANG && (!c->open_uri || !c->open_uri[0])) {
+  if (c->kind == BR_CAND_BANG) {
+    if (c->open_uri && c->open_uri[0]) {
+      br_ctx_free_launch_fields(ctx);
+      ctx->launch_uri = g_strdup(c->open_uri);
+      ctx->done = true;
+      ctx->exit_code = 0;
+      return;
+    }
+    if (c->bang_kw && c->bang_kw[0]) {
+      br_ctx_bang_followup_start(ctx, c->bang_kw);
+      return;
+    }
     return;
   }
   br_ctx_free_launch_fields(ctx);
   if (c->kind == BR_CAND_APP) {
     AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
     ctx->launch_app = g_object_ref(e->info);
-  } else if (c->kind == BR_CAND_BANG) {
-    if (c->open_uri) {
-      ctx->launch_uri = g_strdup(c->open_uri);
-    }
   } else if (c->kind == BR_CAND_FILE && c->file_path) {
     ctx->launch_file = g_strdup(c->file_path);
   }

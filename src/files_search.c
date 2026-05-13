@@ -25,6 +25,13 @@ static int64_t now_ms(void) {
 }
 
 gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t buflen) {
+  if (br_ctx_bang_followup_active(ctx)) {
+    if (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0) {
+      g_strlcpy(buf, ctx->bang_follow_q, buflen);
+      return TRUE;
+    }
+    return FALSE;
+  }
   g_autofree gchar *kw = NULL;
   g_autofree gchar *tail = NULL;
   if (!br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {

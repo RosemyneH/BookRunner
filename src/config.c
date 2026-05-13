@@ -150,8 +150,29 @@ static void merge_bangs(GHashTable *into, GKeyFile *kf) {
   g_strfreev(keys);
 }
 
+void br_config_merge_bangs_ini(BrConfig *c, const char *path) {
+  g_autoptr(GKeyFile) kf = g_key_file_new();
+  if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
+    return;
+  }
+  merge_bangs(c->bangs, kf);
+  merge_bang_desc(c->bang_desc, kf);
+}
+
 void br_config_load(BrConfig *c) {
   br_config_init_defaults(c);
+  {
+    g_autofree gchar *pkg_bangs = g_build_filename(BR_PKGDATADIR, "bangs_generated.ini", NULL);
+    br_config_merge_bangs_ini(c, pkg_bangs);
+  }
+  if (g_getenv("BOOKRUNNER_BANGS_INI")) {
+    br_config_merge_bangs_ini(c, g_getenv("BOOKRUNNER_BANGS_INI"));
+  }
+  {
+    g_autofree gchar *data_bangs =
+        g_build_filename(g_get_user_data_dir(), "bookrunner", "bangs_generated.ini", NULL);
+    br_config_merge_bangs_ini(c, data_bangs);
+  }
   g_autoptr(GKeyFile) kf = g_key_file_new();
   const gchar *user_path = g_build_filename(g_get_user_config_dir(), "bookrunner", "config.ini", NULL);
   const gchar *etc_path = "/etc/xdg/bookrunner/config.ini";

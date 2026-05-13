@@ -53,6 +53,9 @@ cursor_shape_proto_c = custom_target(
 
 bookrunner_inc = include_directories('src', '.')
 
+pkgdatadir = join_paths(get_option('prefix'), get_option('datadir'), 'bookrunner')
+add_project_arguments('-DBR_PKGDATADIR="' + pkgdatadir + '"', language: 'c')
+
 thread_dep = dependency('threads')
 
 executable(
@@ -106,4 +109,8 @@ install_data(
 install_data(
   'data/icons/hicolor/scalable/apps/bookrunner.svg',
   install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps',
+)
+install_data(
+  'data/bangs_generated.ini',
+  install_dir: get_option('datadir') / 'bookrunner',
 )

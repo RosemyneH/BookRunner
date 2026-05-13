@@ -63,6 +63,12 @@ struct AppContext {
 
   GdkPixbuf *icon_file;
 
+  char bang_follow_kw[64];
+  char bang_follow_label[192];
+  char bang_follow_q[BR_MAX_QUERY];
+  char bang_restore_query[BR_MAX_QUERY];
+  GdkPixbuf *bang_follow_icon;
+
   struct wl_display *display;
   struct wl_compositor *compositor;
   struct wl_shm *shm;

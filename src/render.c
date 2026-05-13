@@ -363,7 +363,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
 
   BrCandidate *sel = br_ctx_selected(ctx);
   GdkPixbuf *hero_pb = sel ? sel->icon : NULL;
-  if (sel && sel->kind == BR_CAND_APP) {
+  if (br_ctx_bang_followup_active(ctx)) {
+    hero_pb = ctx->bang_follow_icon;
+  } else if (sel && sel->kind == BR_CAND_APP) {
     AppEntry *e = g_ptr_array_index(ctx->apps, sel->app_index);
     hero_pb = app_entry_icon(e);
   } else if (sel && sel->kind != BR_CAND_APP) {
@@ -379,7 +381,12 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   pango_layout_set_font_description(title_lo, fd);
   pango_layout_set_ellipsize(title_lo, PANGO_ELLIPSIZE_END);
   pango_layout_set_single_paragraph_mode(title_lo, TRUE);
+  g_autofree gchar *follow_title = NULL;
   const char *title = sel && sel->title ? sel->title : "BookRunner";
+  if (br_ctx_bang_followup_active(ctx)) {
+    follow_title = g_strdup_printf("Search %s", ctx->bang_follow_label);
+    title = follow_title;
+  }
   pango_layout_set_width(title_lo, (int)(u.inner_w * PANGO_SCALE));
   pango_layout_set_alignment(title_lo, PANGO_ALIGN_CENTER);
   pango_layout_set_text(title_lo, title, -1);
@@ -402,7 +409,7 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   pango_font_description_set_absolute_size(qfd, (int)(cfg->font_size * PANGO_SCALE * 1.06));
   pango_layout_set_font_description(qlo, qfd);
   pango_layout_set_width(qlo, (int)((u.inner_w - 16) * PANGO_SCALE));
-  pango_layout_set_text(qlo, ctx->query, -1);
+  pango_layout_set_text(qlo, br_ctx_bang_followup_active(ctx) ? ctx->bang_follow_q : ctx->query, -1);
   draw_text_shadowed(cr, qlo, u.x0 + 8, u.y_input + 10, cfg->col_text);
   g_object_unref(qlo);
   pango_font_description_free(qfd);
