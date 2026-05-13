@@ -78,7 +78,7 @@ struct AppContext {
   struct wl_cursor_theme *cursor_theme;
   struct wl_surface *cursor_surface;
 
-  ShmBuffer buf;
+  ShmBuffer framebufs[2];
   int surf_width;
   int surf_height;
   bool needs_draw;

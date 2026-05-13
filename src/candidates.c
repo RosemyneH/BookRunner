@@ -183,6 +183,7 @@ void br_ctx_select_move(AppContext *ctx, int delta) {
     ctx->list_scroll_anim_px = -20.0;
   }
   ctx->sel_pulse = 1.0;
+  ctx->list_anim_last_ms = 0;
   if (ctx->surf_width > 0 && ctx->surf_height > 0) {
     bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
   }

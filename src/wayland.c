@@ -25,10 +25,128 @@
 
 #include "cursor-shape-v1-client-protocol.h"
 
+#define BR_FRAMEBUF_N 2
+
+static void br_buffer_release(void *data, struct wl_buffer *buffer) {
+  AppContext *ctx = data;
+  for (int i = 0; i < BR_FRAMEBUF_N; i++) {
+    if (ctx->framebufs[i].wlbuf == buffer) {
+      ctx->framebufs[i].busy = false;
+      break;
+    }
+  }
+  if (bookrunner_list_anim_pending(ctx)) {
+    ctx->needs_draw = true;
+  }
+}
+
+static const struct wl_buffer_listener br_buffer_listener = {
+    .release = br_buffer_release,
+};
+
+static int br_create_shm(off_t size) {
+  int fd = memfd_create("bookrunner-shm", MFD_CLOEXEC);
+  if (fd < 0) {
+    return -1;
+  }
+  if (ftruncate(fd, size) < 0) {
+    close(fd);
+    return -1;
+  }
+  return fd;
+}
+
 static int64_t br_now_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void br_slot_destroy(ShmBuffer *s) {
+  if (s->wlbuf) {
+    wl_buffer_destroy(s->wlbuf);
+    s->wlbuf = NULL;
+  }
+  if (s->data) {
+    munmap(s->data, s->nbytes);
+    s->data = NULL;
+    s->nbytes = 0;
+  }
+  if (s->fd >= 0) {
+    close(s->fd);
+    s->fd = -1;
+  }
+  s->width = 0;
+  s->height = 0;
+  s->busy = false;
+}
+
+static void br_buffers_destroy_all(AppContext *ctx) {
+  for (int i = 0; i < BR_FRAMEBUF_N; i++) {
+    br_slot_destroy(&ctx->framebufs[i]);
+  }
+}
+
+static bool br_slot_alloc(AppContext *ctx, ShmBuffer *s, int w, int h) {
+  br_slot_destroy(s);
+  int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, w);
+  if (stride <= 0) {
+    return false;
+  }
+  size_t nbytes = (size_t)stride * (size_t)h;
+  int fd = br_create_shm((off_t)nbytes);
+  if (fd < 0) {
+    return false;
+  }
+  void *data = mmap(NULL, nbytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (data == MAP_FAILED) {
+    close(fd);
+    return false;
+  }
+  struct wl_shm_pool *pool = wl_shm_create_pool(ctx->shm, fd, (int32_t)nbytes);
+  struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+  wl_shm_pool_destroy(pool);
+  wl_buffer_add_listener(buf, &br_buffer_listener, ctx);
+  s->fd = fd;
+  s->data = data;
+  s->nbytes = nbytes;
+  s->wlbuf = buf;
+  s->width = w;
+  s->height = h;
+  s->busy = false;
+  return true;
+}
+
+static ShmBuffer *br_framebuf_acquire(AppContext *ctx, int w, int h) {
+  if (w <= 0 || h <= 0 || !ctx->shm) {
+    return NULL;
+  }
+  for (int attempt = 0; attempt < 16; attempt++) {
+    for (int i = 0; i < BR_FRAMEBUF_N; i++) {
+      ShmBuffer *s = &ctx->framebufs[i];
+      if (s->busy) {
+        continue;
+      }
+      if (s->wlbuf && s->width == w && s->height == h) {
+        return s;
+      }
+    }
+    for (int i = 0; i < BR_FRAMEBUF_N; i++) {
+      ShmBuffer *s = &ctx->framebufs[i];
+      if (s->busy) {
+        continue;
+      }
+      if (!br_slot_alloc(ctx, s, w, h)) {
+        return NULL;
+      }
+      return s;
+    }
+    wl_display_dispatch_pending(ctx->display);
+    if (wl_display_roundtrip(ctx->display) < 0) {
+      break;
+    }
+  }
+  return NULL;
 }
 
 static void br_apply_default_pointer_cursor(AppContext *ctx, struct wl_pointer *wp, uint32_t serial) {
@@ -69,70 +187,6 @@ static void br_apply_default_pointer_cursor(AppContext *ctx, struct wl_pointer *
   wl_pointer_set_cursor(wp, serial, ctx->cursor_surface, (int32_t)img->hotspot_x, (int32_t)img->hotspot_y);
 }
 
-static int br_create_shm(off_t size) {
-  int fd = memfd_create("bookrunner-shm", MFD_CLOEXEC);
-  if (fd < 0) {
-    return -1;
-  }
-  if (ftruncate(fd, size) < 0) {
-    close(fd);
-    return -1;
-  }
-  return fd;
-}
-
-static void br_buffer_destroy(AppContext *ctx) {
-  if (ctx->buf.wlbuf) {
-    wl_buffer_destroy(ctx->buf.wlbuf);
-    ctx->buf.wlbuf = NULL;
-  }
-  if (ctx->buf.data) {
-    munmap(ctx->buf.data, ctx->buf.nbytes);
-    ctx->buf.data = NULL;
-    ctx->buf.nbytes = 0;
-  }
-  if (ctx->buf.fd >= 0) {
-    close(ctx->buf.fd);
-    ctx->buf.fd = -1;
-  }
-  ctx->buf.width = 0;
-  ctx->buf.height = 0;
-}
-
-static bool br_buffer_ensure(AppContext *ctx, int w, int h) {
-  if (w <= 0 || h <= 0 || !ctx->shm) {
-    return false;
-  }
-  if (ctx->buf.wlbuf && ctx->buf.width == w && ctx->buf.height == h) {
-    return true;
-  }
-  br_buffer_destroy(ctx);
-  int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, w);
-  if (stride <= 0) {
-    return false;
-  }
-  size_t nbytes = (size_t)stride * (size_t)h;
-  int fd = br_create_shm((off_t)nbytes);
-  if (fd < 0) {
-    return false;
-  }
-  void *data = mmap(NULL, nbytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-  if (data == MAP_FAILED) {
-    close(fd);
-    return false;
-  }
-  struct wl_shm_pool *pool = wl_shm_create_pool(ctx->shm, fd, (int32_t)nbytes);
-  struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
-  wl_shm_pool_destroy(pool);
-  ctx->buf.fd = fd;
-  ctx->buf.data = data;
-  ctx->buf.nbytes = nbytes;
-  ctx->buf.wlbuf = buf;
-  ctx->buf.width = w;
-  ctx->buf.height = h;
-  return true;
-}
-
 static void br_surface_apply_input_region(AppContext *ctx) {
   if (!ctx->surface || !ctx->compositor) {
     return;
@@ -159,20 +213,22 @@ static void br_surface_paint(AppContext *ctx) {
   }
   int w = ctx->surf_width;
   int h = ctx->surf_height;
-  if (!br_buffer_ensure(ctx, w, h)) {
+  ShmBuffer *slot = br_framebuf_acquire(ctx, w, h);
+  if (!slot || !slot->data) {
     return;
   }
   int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, w);
   cairo_surface_t *surf = cairo_image_surface_create_for_data(
-      ctx->buf.data, CAIRO_FORMAT_ARGB32, w, h, stride);
+      slot->data, CAIRO_FORMAT_ARGB32, w, h, stride);
   cairo_t *cr = cairo_create(surf);
   bookrunner_paint(ctx, cr, w, h);
   cairo_destroy(cr);
   cairo_surface_destroy(surf);
   br_surface_apply_input_region(ctx);
-  wl_surface_attach(ctx->surface, ctx->buf.wlbuf, 0, 0);
+  wl_surface_attach(ctx->surface, slot->wlbuf, 0, 0);
   wl_surface_damage(ctx->surface, 0, 0, w, h);
   wl_surface_commit(ctx->surface);
+  slot->busy = true;
   ctx->needs_draw = false;
   if (bookrunner_list_anim_pending(ctx)) {
     ctx->needs_draw = true;
@@ -556,7 +612,7 @@ static const struct wl_registry_listener registry_listener = {
 };
 
 static void br_wayland_teardown(AppContext *ctx) {
-  br_buffer_destroy(ctx);
+  br_buffers_destroy_all(ctx);
   if (ctx->layer_surface) {
     zwlr_layer_surface_v1_destroy(ctx->layer_surface);
     ctx->layer_surface = NULL;
@@ -617,7 +673,15 @@ static void br_wayland_teardown(AppContext *ctx) {
 }
 
 int bookrunner_wayland_run(AppContext *ctx) {
-  ctx->buf.fd = -1;
+  for (int i = 0; i < BR_FRAMEBUF_N; i++) {
+    ctx->framebufs[i].fd = -1;
+    ctx->framebufs[i].wlbuf = NULL;
+    ctx->framebufs[i].data = NULL;
+    ctx->framebufs[i].nbytes = 0;
+    ctx->framebufs[i].busy = false;
+    ctx->framebufs[i].width = 0;
+    ctx->framebufs[i].height = 0;
+  }
   ctx->display = wl_display_connect(NULL);
   if (!ctx->display) {
     return 2;
