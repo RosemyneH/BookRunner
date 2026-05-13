@@ -179,6 +179,12 @@ void br_config_merge_bangs_ini(BrConfig *c, const char *path) {
   merge_bang_icons(c->bang_icons, kf);
 }
 
+static void strip_reserved_bang_triggers(BrConfig *c) {
+  g_hash_table_remove(c->bangs, "set");
+  g_hash_table_remove(c->bang_desc, "set");
+  g_hash_table_remove(c->bang_icons, "set");
+}
+
 void br_config_load(BrConfig *c) {
   br_config_init_defaults(c);
   {
@@ -198,6 +204,7 @@ void br_config_load(BrConfig *c) {
         g_build_filename(g_get_user_data_dir(), "bookrunner", "bangs_generated.ini", NULL);
     br_config_merge_bangs_ini(c, data_bangs);
   }
+  strip_reserved_bang_triggers(c);
   g_autoptr(GKeyFile) kf = g_key_file_new();
   const gchar *user_path = g_build_filename(g_get_user_config_dir(), "bookrunner", "config.ini", NULL);
   const gchar *etc_path = "/etc/xdg/bookrunner/config.ini";
@@ -221,8 +228,14 @@ void br_config_load(BrConfig *c) {
     c->font_size = g_key_file_get_double(kf, "ui", "font_size", NULL) ?: c->font_size;
     gchar *bp = g_key_file_get_string(kf, "ui", "bang_prefix", NULL);
     if (bp) {
+      g_strstrip(bp);
       g_free(c->bang_prefix);
-      c->bang_prefix = bp;
+      if (bp[0]) {
+        c->bang_prefix = bp;
+      } else {
+        g_free(bp);
+        c->bang_prefix = g_strdup("!");
+      }
     }
     c->max_visible_rows = (int)g_key_file_get_integer(kf, "ui", "max_visible_rows", NULL) ?: c->max_visible_rows;
     c->debounce_ms = (int)g_key_file_get_integer(kf, "ui", "debounce_ms", NULL) ?: c->debounce_ms;
@@ -284,6 +297,8 @@ void br_config_load(BrConfig *c) {
   merge_bangs(c->bangs, kf);
   merge_bang_desc(c->bang_desc, kf);
   merge_bang_icons(c->bang_icons, kf);
+
+  strip_reserved_bang_triggers(c);
 
   if (c->file_backend == BR_FILE_BACKEND_AUTO) {
     g_autofree gchar *fdp = g_find_program_in_path(c->fd_command);
