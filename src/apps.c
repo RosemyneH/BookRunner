@@ -277,7 +277,7 @@ void apps_free(GPtrArray *apps) {
   g_ptr_array_unref(apps);
 }
 
-void apps_filter_indices(const GPtrArray *apps, const char *query, gint **out_indices, int *out_n) {
+void apps_filter_indices(const GPtrArray *apps, const char *query, const BrConfig *cfg, gint **out_indices, int *out_n) {
   GArray *a = g_array_new(FALSE, FALSE, sizeof(gint));
   char *qfold = NULL;
   if (query && query[0]) {
@@ -285,6 +285,10 @@ void apps_filter_indices(const GPtrArray *apps, const char *query, gint **out_in
   }
   for (guint i = 0; i < apps->len; i++) {
     AppEntry *e = g_ptr_array_index(apps, i);
+    const char *id = g_app_info_get_id(G_APP_INFO(e->info));
+    if (cfg && cfg->ignored_apps && id && g_hash_table_contains(cfg->ignored_apps, id)) {
+      continue;
+    }
     const char *name = g_app_info_get_display_name(G_APP_INFO(e->info));
     if (!qfold) {
       gint idx = (gint)i;

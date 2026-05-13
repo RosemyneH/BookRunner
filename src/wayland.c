@@ -318,6 +318,11 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     br_ctx_select_move(ctx, 1);
     return;
   }
+  if (sym == XKB_KEY_Insert) {
+    if (br_ctx_ignore_selected_app(ctx)) {
+      return;
+    }
+  }
   if (sym == XKB_KEY_BackSpace) {
     query_del_char(ctx);
     br_ctx_refilter(ctx);

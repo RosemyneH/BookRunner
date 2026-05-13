@@ -88,9 +88,30 @@ void br_config_init_defaults(BrConfig *c) {
   c->list_wrap = true;
   c->invert_list_wheel = true;
   c->bangs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  c->bang_desc = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  c->ignored_apps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  c->bang_f_enabled = FALSE;
   g_hash_table_insert(c->bangs, g_strdup("g"), g_strdup("https://www.google.com/search?q=%s"));
   g_hash_table_insert(c->bangs, g_strdup("w"), g_strdup("https://en.wikipedia.org/wiki/Special:Search?search=%s"));
   g_hash_table_insert(c->bangs, g_strdup("yt"), g_strdup("https://www.youtube.com/results?search_query=%s"));
+}
+
+static void merge_bang_desc(GHashTable *into, GKeyFile *kf) {
+  if (!g_key_file_has_group(kf, "bang_desc")) {
+    return;
+  }
+  gsize n = 0;
+  gchar **keys = g_key_file_get_keys(kf, "bang_desc", &n, NULL);
+  if (!keys) {
+    return;
+  }
+  for (gsize i = 0; i < n; i++) {
+    gchar *v = g_key_file_get_string(kf, "bang_desc", keys[i], NULL);
+    if (v) {
+      g_hash_table_insert(into, g_strdup(keys[i]), v);
+    }
+  }
+  g_strfreev(keys);
 }
 
 void br_config_clear(BrConfig *c) {
@@ -101,6 +122,12 @@ void br_config_clear(BrConfig *c) {
   g_strfreev(c->file_roots);
   if (c->bangs) {
     g_hash_table_destroy(c->bangs);
+  }
+  if (c->bang_desc) {
+    g_hash_table_destroy(c->bang_desc);
+  }
+  if (c->ignored_apps) {
+    g_hash_table_destroy(c->ignored_apps);
   }
   memset(c, 0, sizeof(*c));
 }
@@ -209,6 +236,7 @@ void br_config_load(BrConfig *c) {
   }
 
   merge_bangs(c->bangs, kf);
+  merge_bang_desc(c->bang_desc, kf);
 
   if (c->file_backend == BR_FILE_BACKEND_AUTO) {
     g_autofree gchar *fdp = g_find_program_in_path(c->fd_command);

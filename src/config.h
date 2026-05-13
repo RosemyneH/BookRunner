@@ -37,6 +37,9 @@ struct BrConfig {
   bool invert_list_wheel;
 
   GHashTable *bangs;
+  GHashTable *bang_desc;
+  GHashTable *ignored_apps;
+  gboolean bang_f_enabled;
 };
 
 void br_config_init_defaults(BrConfig *c);

@@ -24,6 +24,7 @@ struct BrFileSearch {
 
 void br_file_search_init(BrFileSearch *fs);
 void br_file_search_fini(BrFileSearch *fs);
+gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t buflen);
 void br_file_search_on_query_changed(AppContext *ctx);
 void br_file_search_poll(AppContext *ctx);
 void br_file_search_drain_notify(AppContext *ctx);
