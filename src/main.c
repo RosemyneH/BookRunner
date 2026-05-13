@@ -20,6 +20,7 @@ int main(void) {
   }
   AppContext ctx;
   memset(&ctx, 0, sizeof ctx);
+  br_arena_init(&ctx.candidate_arena);
   br_config_load(&ctx.config);
   ctx.apps = apps_load();
   br_file_search_init(&ctx.file_search);
@@ -59,6 +60,7 @@ int main(void) {
   }
   apps_free(ctx.apps);
   br_file_search_fini(&ctx.file_search);
+  br_arena_free(&ctx.candidate_arena);
   br_config_clear(&ctx.config);
   g_clear_object(&ctx.icon_file);
   g_clear_object(&ctx.icon_bang);

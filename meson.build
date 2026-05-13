@@ -59,6 +59,7 @@ executable(
   [
     files(
       'src/main.c',
+      'src/arena.c',
       'src/apps.c',
       'src/render.c',
       'src/wayland.c',

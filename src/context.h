@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arena.h"
 #include "apps.h"
 #include "candidates.h"
 #include "config.h"
@@ -34,6 +35,7 @@ struct ShmBuffer {
 typedef struct AppContext AppContext;
 struct AppContext {
   GPtrArray *apps;
+  BrArena candidate_arena;
   GPtrArray *candidates;
   char query[BR_MAX_QUERY];
   int selected;

@@ -8,18 +8,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-void br_candidate_free(BrCandidate *c) {
+static BrCandidate *alloc_candidate(AppContext *ctx) {
+  BrCandidate *c =
+      br_arena_alloc(&ctx->candidate_arena, sizeof(BrCandidate), _Alignof(BrCandidate));
   if (!c) {
-    return;
+    return NULL;
   }
-  g_free(c->title);
-  g_free(c->subtitle);
+  memset(c, 0, sizeof *c);
+  return c;
+}
+
+static void candidate_unref_icon(BrCandidate *c) {
   if (c->kind != BR_CAND_APP && c->icon) {
     g_object_unref(c->icon);
+    c->icon = NULL;
   }
-  g_free(c->open_uri);
-  g_free(c->file_path);
-  g_free(c);
 }
 
 static void candidates_clear(AppContext *ctx) {
@@ -27,8 +30,9 @@ static void candidates_clear(AppContext *ctx) {
     return;
   }
   for (guint i = 0; i < ctx->candidates->len; i++) {
-    br_candidate_free(g_ptr_array_index(ctx->candidates, i));
+    candidate_unref_icon(g_ptr_array_index(ctx->candidates, i));
   }
+  br_arena_reset(&ctx->candidate_arena);
   g_ptr_array_set_size(ctx->candidates, 0);
 }
 
@@ -57,12 +61,17 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     int cap = ctx->config.max_visible_rows;
     int n = 0;
     while (g_hash_table_iter_next(&it, &gk, &gv) && n < cap) {
-      BrCandidate *c = g_new0(BrCandidate, 1);
+      BrCandidate *c = alloc_candidate(ctx);
+      if (!c) {
+        break;
+      }
       c->kind = BR_CAND_BANG;
-      c->title = g_strdup_printf("!%s", (char *)gk);
-      c->subtitle = g_strdup((char *)gv);
+      g_autofree gchar *t = g_strdup_printf("!%s", (char *)gk);
+      c->title = br_arena_strdup(&ctx->candidate_arena, t);
+      c->subtitle = br_arena_strdup(&ctx->candidate_arena, (char *)gv);
       c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
-      c->open_uri = br_bang_build_url((char *)gv, "");
+      g_autofree gchar *ou = br_bang_build_url((char *)gv, "");
+      c->open_uri = br_arena_strdup(&ctx->candidate_arena, ou);
       g_ptr_array_add(ctx->candidates, c);
       n++;
     }
@@ -70,21 +79,29 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
   }
   const char *tpl = g_hash_table_lookup(ctx->config.bangs, kw);
   if (!tpl) {
-    BrCandidate *c = g_new0(BrCandidate, 1);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      return;
+    }
     c->kind = BR_CAND_BANG;
-    c->title = g_strdup("Unknown bang");
-    c->subtitle = g_strdup(kw);
+    c->title = br_arena_strdup(&ctx->candidate_arena, "Unknown bang");
+    c->subtitle = br_arena_strdup(&ctx->candidate_arena, kw);
     c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
     g_ptr_array_add(ctx->candidates, c);
     return;
   }
   g_autofree gchar *uri = br_bang_build_url(tpl, tail);
-  BrCandidate *c = g_new0(BrCandidate, 1);
+  BrCandidate *c = alloc_candidate(ctx);
+  if (!c) {
+    return;
+  }
   c->kind = BR_CAND_BANG;
-  c->title = g_strdup_printf("!%s", kw);
-  c->subtitle = g_strdup(tail && *tail ? tail : uri);
+  g_autofree gchar *title = g_strdup_printf("!%s", kw);
+  c->title = br_arena_strdup(&ctx->candidate_arena, title);
+  c->subtitle = br_arena_strdup(
+      &ctx->candidate_arena, tail && *tail ? tail : uri);
   c->icon = ctx->icon_bang ? g_object_ref(ctx->icon_bang) : NULL;
-  c->open_uri = g_steal_pointer(&uri);
+  c->open_uri = br_arena_strdup(&ctx->candidate_arena, uri);
   g_ptr_array_add(ctx->candidates, c);
 }
 
@@ -96,10 +113,15 @@ static void add_app_and_file_rows(AppContext *ctx) {
   int used = 0;
   for (int i = 0; i < nidx && used < cap; i++) {
     AppEntry *e = g_ptr_array_index(ctx->apps, (guint)idx[i]);
-    BrCandidate *c = g_new0(BrCandidate, 1);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      break;
+    }
     c->kind = BR_CAND_APP;
-    c->title = g_strdup(g_app_info_get_display_name(G_APP_INFO(e->info)));
-    c->subtitle = g_strdup(g_app_info_get_name(G_APP_INFO(e->info)));
+    c->title = br_arena_strdup(
+        &ctx->candidate_arena, g_app_info_get_display_name(G_APP_INFO(e->info)));
+    c->subtitle =
+        br_arena_strdup(&ctx->candidate_arena, g_app_info_get_name(G_APP_INFO(e->info)));
     c->icon = e->icon;
     c->app_index = (guint)idx[i];
     g_ptr_array_add(ctx->candidates, c);
@@ -110,12 +132,16 @@ static void add_app_and_file_rows(AppContext *ctx) {
   pthread_mutex_lock(&ctx->file_search.mx);
   for (guint i = 0; i < ctx->file_search.paths->len && used < cap; i++) {
     const char *path = g_ptr_array_index(ctx->file_search.paths, i);
-    BrCandidate *c = g_new0(BrCandidate, 1);
+    BrCandidate *c = alloc_candidate(ctx);
+    if (!c) {
+      break;
+    }
     c->kind = BR_CAND_FILE;
-    c->title = g_path_get_basename(path);
-    c->subtitle = g_strdup(path);
+    g_autofree gchar *base = g_path_get_basename(path);
+    c->title = br_arena_strdup(&ctx->candidate_arena, base);
+    c->subtitle = br_arena_strdup(&ctx->candidate_arena, path);
     c->icon = ctx->icon_file ? g_object_ref(ctx->icon_file) : NULL;
-    c->file_path = g_strdup(path);
+    c->file_path = br_arena_strdup(&ctx->candidate_arena, path);
     g_ptr_array_add(ctx->candidates, c);
     used++;
   }
@@ -157,7 +183,6 @@ void br_ctx_select_move(AppContext *ctx, int delta) {
     ctx->list_scroll_anim_px = -20.0;
   }
   ctx->sel_pulse = 1.0;
-  ctx->list_anim_last_ms = 0;
   if (ctx->surf_width > 0 && ctx->surf_height > 0) {
     bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
   }
