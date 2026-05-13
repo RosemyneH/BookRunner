@@ -8,20 +8,24 @@ on:
 permissions:
   contents: write
 
+env:
+  DEBIAN_FRONTEND: noninteractive
+
 jobs:
   linux-packages:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
             meson ninja-build pkg-config rpm file zstd wget curl \
             libwayland-dev wayland-protocols libwayland-cursor-dev \
-            libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
-            libglib2.0-dev libsqlite3-dev libxkbcommon-dev \
+            libcairo2-dev libpango1.0-dev libpangocairo1.0-dev \
+            libgdk-pixbuf-2.0-dev libglib2.0-dev libsqlite3-dev libxkbcommon-dev \
             librsvg2-bin
 
       - name: Compute version
@@ -84,7 +88,7 @@ jobs:
           cat dist/SHA256SUMS
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.deb

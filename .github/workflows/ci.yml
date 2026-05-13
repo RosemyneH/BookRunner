@@ -13,20 +13,24 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  DEBIAN_FRONTEND: noninteractive
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
             meson ninja-build pkg-config \
             libwayland-dev wayland-protocols libwayland-cursor-dev \
-            libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
-            libglib2.0-dev libsqlite3-dev libxkbcommon-dev
+            libcairo2-dev libpango1.0-dev libpangocairo1.0-dev \
+            libgdk-pixbuf-2.0-dev libglib2.0-dev libsqlite3-dev libxkbcommon-dev
 
       - name: Meson build
         run: |
