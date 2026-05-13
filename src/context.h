@@ -41,8 +41,10 @@ struct AppContext {
   int selected;
   int list_first_visible;
   double list_scroll_anim_px;
+  double list_recenter_px;
   double sel_pulse;
   int64_t list_anim_last_ms;
+  int64_t list_scroll_interact_ms;
   bool done;
   int exit_code;
 

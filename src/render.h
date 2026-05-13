@@ -2,6 +2,7 @@
 
 #include <cairo.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct AppContext AppContext;
 
@@ -11,3 +12,4 @@ void bookrunner_input_region_extents(const AppContext *ctx, int width, int heigh
 void bookrunner_list_ensure_scroll(AppContext *ctx, int width, int height);
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height);
 bool bookrunner_list_anim_pending(const AppContext *ctx);
+int64_t bookrunner_mono_ms(void);
