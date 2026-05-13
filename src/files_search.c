@@ -26,7 +26,8 @@ static int64_t now_ms(void) {
 
 gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t buflen) {
   if (br_ctx_bang_followup_active(ctx)) {
-    if (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0) {
+    if (strcmp(ctx->bang_follow_kw, "fi") == 0 ||
+        (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0)) {
       g_strlcpy(buf, ctx->bang_follow_q, buflen);
       return TRUE;
     }
@@ -40,6 +41,10 @@ gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t
   }
   if (g_strcmp0(kw, "set") == 0) {
     return FALSE;
+  }
+  if (g_strcmp0(kw, "fi") == 0) {
+    g_strlcpy(buf, tail ? tail : "", buflen);
+    return TRUE;
   }
   if (ctx->config.bang_f_enabled && g_strcmp0(kw, "f") == 0) {
     g_strlcpy(buf, tail ? tail : "", buflen);
