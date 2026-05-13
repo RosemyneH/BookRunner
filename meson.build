@@ -17,6 +17,7 @@ gdk_pixbuf_dep = dependency('gdk-pixbuf-2.0')
 gio_dep = dependency('gio-2.0')
 gio_unix_dep = dependency('gio-unix-2.0')
 xkbcommon_dep = dependency('xkbcommon')
+sqlite3_dep = dependency('sqlite3')
 
 wayland_scanner = find_program('wayland-scanner', native: true)
 wl_proto = files('protocols/wlr-layer-shell-unstable-v1.xml')
@@ -70,6 +71,7 @@ executable(
       'src/bangs.c',
       'src/xdg_popup_stub.c',
       'src/tablet_tool_v2_stub.c',
+      'src/usage_db.c',
     ),
     wl_proto_c,
     wl_proto_h,
@@ -87,6 +89,7 @@ executable(
     gio_dep,
     gio_unix_dep,
     xkbcommon_dep,
+    sqlite3_dep,
     m_dep,
     thread_dep,
   ],

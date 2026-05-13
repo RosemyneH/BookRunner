@@ -4,9 +4,33 @@
 #include "bangs.h"
 #include "context.h"
 #include "render.h"
+#include "usage_db.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+  const GPtrArray *apps;
+  BrUsageDb *usage;
+} BrAppIdxSortCtx;
+
+static int cmp_app_indices(const void *a, const void *b, void *userdata) {
+  gint ia = *(const gint *)a;
+  gint ib = *(const gint *)b;
+  BrAppIdxSortCtx *s = userdata;
+  AppEntry *ea = g_ptr_array_index(s->apps, (guint)ia);
+  AppEntry *eb = g_ptr_array_index(s->apps, (guint)ib);
+  const char *ida = g_app_info_get_id(G_APP_INFO(ea->info));
+  const char *idb = g_app_info_get_id(G_APP_INFO(eb->info));
+  gint64 ca = br_usage_get(s->usage, ida);
+  gint64 cb = br_usage_get(s->usage, idb);
+  if (ca != cb) {
+    return (ca > cb) ? -1 : 1;
+  }
+  const char *na = g_app_info_get_display_name(G_APP_INFO(ea->info));
+  const char *nb = g_app_info_get_display_name(G_APP_INFO(eb->info));
+  return g_utf8_collate(na ? na : "", nb ? nb : "");
+}
 
 static BrCandidate *alloc_candidate(AppContext *ctx) {
   BrCandidate *c =
@@ -109,6 +133,10 @@ static void add_app_and_file_rows(AppContext *ctx) {
   gint *idx = NULL;
   int nidx = 0;
   apps_filter_indices(ctx->apps, ctx->query, &idx, &nidx);
+  BrAppIdxSortCtx sctx = {.apps = ctx->apps, .usage = ctx->usage_db};
+  if (nidx > 1) {
+    qsort_r(idx, (size_t)nidx, sizeof idx[0], cmp_app_indices, &sctx);
+  }
   int cap = ctx->config.max_visible_rows;
   int used = 0;
   for (int i = 0; i < nidx && used < cap; i++) {

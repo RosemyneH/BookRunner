@@ -6,6 +6,7 @@
 #include "config.h"
 #include "files_search.h"
 #include "input_xkb.h"
+#include "usage_db.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
@@ -35,6 +36,7 @@ struct ShmBuffer {
 typedef struct AppContext AppContext;
 struct AppContext {
   GPtrArray *apps;
+  BrUsageDb *usage_db;
   BrArena candidate_arena;
   GPtrArray *candidates;
   char query[BR_MAX_QUERY];
