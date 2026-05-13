@@ -297,12 +297,16 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     return;
   }
   xkb_keysym_t sym = input_xkb_key_sym(&ctx->ixkb, key);
+  uint32_t utf = 0;
+  if (ctx->ixkb.state) {
+    utf = xkb_state_key_get_utf32(ctx->ixkb.state, key + 8);
+  }
   if (sym == XKB_KEY_Escape) {
     ctx->done = true;
     ctx->exit_code = 1;
     return;
   }
-  if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+  if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter || sym == XKB_KEY_grave || utf == '`') {
     br_ctx_activate(ctx);
     return;
   }
@@ -329,9 +333,8 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
   if (!ctx->ixkb.state) {
     return;
   }
-  uint32_t cp = xkb_state_key_get_utf32(ctx->ixkb.state, key + 8);
-  if (cp != 0 && !input_xkb_mod_ctrl(&ctx->ixkb)) {
-    query_append_cp(ctx, cp);
+  if (utf != 0 && !input_xkb_mod_ctrl(&ctx->ixkb)) {
+    query_append_cp(ctx, utf);
     br_ctx_refilter(ctx);
     br_file_search_on_query_changed(ctx);
   }
