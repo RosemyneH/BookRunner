@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            meson ninja-build pkg-config \
+            libwayland-dev wayland-protocols libwayland-cursor-dev \
+            libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
+            libglib2.0-dev libsqlite3-dev libxkbcommon-dev
+
+      - name: Meson build
+        run: |
+          meson setup build --prefix=/usr -Dwerror=false
+          meson compile -C build
+
+      - name: Meson install (dry layout)
+        run: |
+          DESTDIR="${{ github.workspace }}/staging" meson install -C build
+          test -x staging/usr/bin/bookrunner
+          test -f staging/usr/share/applications/bookrunner.desktop

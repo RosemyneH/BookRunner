@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=BookRunner
+GenericName=Application launcher
+Comment=Wayland layer-shell launcher for apps and files
+Exec=bookrunner
+Terminal=false
+Categories=Utility;
+Keywords=launcher;wayland;applications;
+Icon=bookrunner
+StartupNotify=false
