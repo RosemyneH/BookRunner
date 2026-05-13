@@ -19,6 +19,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
 
@@ -42,3 +44,33 @@ jobs:
           DESTDIR="${{ github.workspace }}/staging" meson install -C build
           test -x staging/usr/bin/bookrunner
           test -f staging/usr/share/applications/bookrunner.desktop
+
+  release-snapshot:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Snapshot tag name
+        id: snap
+        run: |
+          ver=$(python3 -c "import re; m=re.search(r\"version:\\s*'([^']+)'\", open('meson.build',encoding='utf-8').read()); print(m.group(1) if m else '0.0.0')")
+          tag="snapshot-${ver}-ci.${GITHUB_RUN_ID}"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Will create ${tag} at ${GITHUB_SHA}"
+
+      - name: Create GitHub Release (and tag)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.snap.outputs.tag }}" \
+            --target "${{ github.sha }}" \
+            --title "Snapshot ${{ steps.snap.outputs.version }} (${{ github.run_id }})" \
+            --prerelease \
+            --generate-notes
