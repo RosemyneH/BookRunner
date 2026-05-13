@@ -189,7 +189,7 @@ bool bookrunner_list_anim_pending(const AppContext *ctx) {
   if (!ctx->candidates || ctx->candidates->len == 0) {
     return false;
   }
-  return fabs(ctx->list_scroll_px - ctx->list_scroll_goal_cached) > 0.14;
+  return fabs(ctx->list_scroll_px - ctx->list_scroll_goal_cached) > 0.055;
 }
 
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
@@ -197,8 +197,8 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   double dt = 0;
   if (ctx->list_anim_last_ms != 0) {
     dt = ((double)(now - ctx->list_anim_last_ms)) / 1000.0;
-    if (dt > 0 && dt > 1.0 / 60.0) {
-      dt = 1.0 / 60.0;
+    if (dt > 0 && dt > 1.0 / 45.0) {
+      dt = 1.0 / 45.0;
     }
   }
   ctx->list_anim_last_ms = now;
@@ -233,7 +233,7 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
         scroll_hi = scroll_lo;
       }
     }
-    bool fast = ctx->list_scroll_interact_ms != 0 && (now - ctx->list_scroll_interact_ms) < 28;
+    bool fast = ctx->list_scroll_interact_ms != 0 && (now - ctx->list_scroll_interact_ms) < 16;
     double center = (double)ctx->selected * row_h + row_h * 0.5 - list_h * 0.5;
     double goal = 0;
     if (!strip && smax <= 0.0) {
@@ -257,9 +257,12 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
       ctx->list_scroll_px = goal;
       ctx->list_scroll_init_done = true;
     } else if (dt > 0 && (strip || smax > 0)) {
-      const double k = fast ? 72.0 : 96.0;
+      const double k = fast ? 120.0 : 240.0;
       ctx->list_scroll_px += (goal - ctx->list_scroll_px) * fmin(1.0, k * dt);
       ctx->list_scroll_px = fmax(scroll_lo, fmin(ctx->list_scroll_px, scroll_hi));
+      if (fabs(goal - ctx->list_scroll_px) < 0.35) {
+        ctx->list_scroll_px = goal;
+      }
     } else if (!strip && smax <= 0) {
       ctx->list_scroll_px = 0;
     }
