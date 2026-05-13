@@ -201,7 +201,7 @@ void bookrunner_list_ensure_scroll(AppContext *ctx, int width, int height) {
 }
 
 bool bookrunner_list_anim_pending(const AppContext *ctx) {
-  return fabs(ctx->list_scroll_anim_px) > 0.22 || ctx->sel_pulse > 0.028;
+  return fabs(ctx->list_scroll_anim_px) > 0.02 || ctx->sel_pulse > 0.02;
 }
 
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
