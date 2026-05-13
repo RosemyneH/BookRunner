@@ -25,7 +25,7 @@
 
 #include "cursor-shape-v1-client-protocol.h"
 
-#define BR_FRAMEBUF_N 2
+#define BR_FRAMEBUF_N 3
 
 static void br_buffer_release(void *data, struct wl_buffer *buffer) {
   AppContext *ctx = data;
@@ -121,7 +121,7 @@ static ShmBuffer *br_framebuf_acquire(AppContext *ctx, int w, int h) {
   if (w <= 0 || h <= 0 || !ctx->shm) {
     return NULL;
   }
-  for (int attempt = 0; attempt < 16; attempt++) {
+  for (int attempt = 0; attempt < 2; attempt++) {
     for (int i = 0; i < BR_FRAMEBUF_N; i++) {
       ShmBuffer *s = &ctx->framebufs[i];
       if (s->busy) {
@@ -142,9 +142,6 @@ static ShmBuffer *br_framebuf_acquire(AppContext *ctx, int w, int h) {
       return s;
     }
     wl_display_dispatch_pending(ctx->display);
-    if (wl_display_roundtrip(ctx->display) < 0) {
-      break;
-    }
   }
   return NULL;
 }
@@ -215,6 +212,7 @@ static void br_surface_paint(AppContext *ctx) {
   int h = ctx->surf_height;
   ShmBuffer *slot = br_framebuf_acquire(ctx, w, h);
   if (!slot || !slot->data) {
+    wl_display_dispatch_pending(ctx->display);
     return;
   }
   int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, w);
