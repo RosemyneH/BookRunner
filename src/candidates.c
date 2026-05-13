@@ -37,12 +37,19 @@ static int cmp_cstr(const void *a, const void *b) {
   return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
+static gboolean bang_kw_is_always_file(const char *kw) {
+  return kw && (strcmp(kw, "fi") == 0 || strcmp(kw, "fo") == 0);
+}
+
 static const char *bang_kw_label(const char *kw) {
   if (!kw || !kw[0]) {
     return "Bang";
   }
   if (strcmp(kw, "f") == 0 || strcmp(kw, "fi") == 0) {
     return "Files";
+  }
+  if (strcmp(kw, "fo") == 0) {
+    return "Folder";
   }
   if (strcmp(kw, "set") == 0) {
     return "Settings";
@@ -65,7 +72,7 @@ static const char *bang_builtin_icon(const char *kw) {
   if (!kw) {
     return NULL;
   }
-  if (strcmp(kw, "f") == 0 || strcmp(kw, "fi") == 0) {
+  if (strcmp(kw, "f") == 0 || strcmp(kw, "fi") == 0 || strcmp(kw, "fo") == 0) {
     return "folder";
   }
   if (strcmp(kw, "set") == 0) {
@@ -319,6 +326,7 @@ static void add_set_rows(AppContext *ctx) {
 
   add_set_help_bang_row(ctx, "set", "", cap, &used);
   add_set_help_bang_row(ctx, "fi", "", cap, &used);
+  add_set_help_bang_row(ctx, "fo", "", cap, &used);
   if (ctx->config.bang_f_enabled && !g_hash_table_contains(ctx->config.bangs, "f")) {
     add_set_help_bang_row(ctx, "f", "", cap, &used);
   }
@@ -332,7 +340,7 @@ static void add_set_rows(AppContext *ctx) {
     if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
       continue;
     }
-    if (strcmp(key, "fi") == 0) {
+    if (strcmp(key, "fi") == 0 || strcmp(key, "fo") == 0) {
       continue;
     }
     g_ptr_array_add(keys, g_strdup(key));
@@ -343,7 +351,7 @@ static void add_set_rows(AppContext *ctx) {
     if (strcmp(key, "set") == 0) {
       continue;
     }
-    if (strcmp(key, "fi") == 0) {
+    if (strcmp(key, "fi") == 0 || strcmp(key, "fo") == 0) {
       continue;
     }
     const char *tpl = g_hash_table_lookup(ctx->config.bangs, key);
@@ -363,7 +371,7 @@ static void add_bang_prefix_rows(AppContext *ctx, const char *kw) {
     if (strcmp(key, "set") == 0) {
       continue;
     }
-    if (strcmp(key, "fi") == 0) {
+    if (strcmp(key, "fi") == 0 || strcmp(key, "fo") == 0) {
       continue;
     }
     if (!ctx->config.bang_f_enabled && strcmp(key, "f") == 0) {
@@ -422,8 +430,23 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     add_set_rows(ctx);
     return;
   }
-  if (strcmp(kw, "fi") == 0) {
-    add_f_rows(ctx, tail);
+  if (bang_kw_is_always_file(kw)) {
+    if (tail && *tail) {
+      add_f_rows(ctx, tail);
+    } else {
+      BrCandidate *c = alloc_candidate(ctx);
+      if (!c) {
+        return;
+      }
+      c->kind = BR_CAND_BANG;
+      const char *lab = bang_row_label(ctx, kw);
+      c->title = br_arena_strdup(&ctx->candidate_arena, lab);
+      c->subtitle = NULL;
+      c->bang_kw = br_arena_strdup(&ctx->candidate_arena, kw);
+      bang_row_set_icon(ctx, c, kw);
+      c->open_uri = NULL;
+      g_ptr_array_add(ctx->candidates, c);
+    }
     return;
   }
   if (ctx->config.bang_f_enabled && strcmp(kw, "f") == 0) {
@@ -451,6 +474,9 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
     if (!g_hash_table_contains(ctx->config.bangs, "fi")) {
       g_ptr_array_add(keys, g_strdup("fi"));
     }
+    if (!g_hash_table_contains(ctx->config.bangs, "fo")) {
+      g_ptr_array_add(keys, g_strdup("fo"));
+    }
     g_ptr_array_sort(keys, cmp_cstr);
     int cap = ctx->config.max_visible_rows;
     int n = 0;
@@ -461,6 +487,9 @@ static void add_bang_rows(AppContext *ctx, const char *kw, const char *tail) {
         val = "";
       }
       if (strcmp(key, "fi") == 0 && !val) {
+        val = "";
+      }
+      if (strcmp(key, "fo") == 0 && !val) {
         val = "";
       }
       if (!val) {
@@ -553,7 +582,7 @@ void br_ctx_refilter(AppContext *ctx) {
   candidates_clear(ctx);
 
   if (ctx->bang_follow_kw[0]) {
-    if (strcmp(ctx->bang_follow_kw, "fi") == 0 ||
+    if (strcmp(ctx->bang_follow_kw, "fi") == 0 || strcmp(ctx->bang_follow_kw, "fo") == 0 ||
         (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0)) {
       add_f_rows(ctx, ctx->bang_follow_q);
     }
@@ -668,7 +697,8 @@ void br_ctx_bang_followup_launch(AppContext *ctx) {
   if (!br_ctx_bang_followup_active(ctx)) {
     return;
   }
-  if (strcmp(ctx->bang_follow_kw, "f") == 0 || strcmp(ctx->bang_follow_kw, "fi") == 0) {
+  if (strcmp(ctx->bang_follow_kw, "f") == 0 || strcmp(ctx->bang_follow_kw, "fi") == 0 ||
+      strcmp(ctx->bang_follow_kw, "fo") == 0) {
     return;
   }
   const char *tpl = g_hash_table_lookup(ctx->config.bangs, ctx->bang_follow_kw);
