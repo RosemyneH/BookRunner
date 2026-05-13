@@ -54,7 +54,12 @@ cursor_shape_proto_c = custom_target(
 bookrunner_inc = include_directories('src', '.')
 
 pkgdatadir = join_paths(get_option('prefix'), get_option('datadir'), 'bookrunner')
-add_project_arguments('-DBR_PKGDATADIR="' + pkgdatadir + '"', language: 'c')
+src_bangs_ini = join_paths(meson.current_source_dir(), 'data', 'bangs_generated.ini')
+add_project_arguments(
+  '-DBR_PKGDATADIR="' + pkgdatadir + '"',
+  '-DBR_SRC_BANGS_INI="' + src_bangs_ini + '"',
+  language: 'c',
+)
 
 thread_dep = dependency('threads')
 
