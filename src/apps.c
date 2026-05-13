@@ -206,6 +206,16 @@ static gint app_sort_cb(gconstpointer a, gconstpointer b) {
   return g_utf8_collate(na, nb);
 }
 
+GdkPixbuf *app_entry_icon(AppEntry *e) {
+  if (!e || !e->info) {
+    return NULL;
+  }
+  if (!e->icon) {
+    e->icon = app_load_icon(e->info, 48);
+  }
+  return e->icon;
+}
+
 GdkPixbuf *app_load_icon(GDesktopAppInfo *info, int size_px) {
   GIcon *gicon = g_app_info_get_icon(G_APP_INFO(info));
   if (!gicon) {
@@ -245,7 +255,6 @@ GPtrArray *apps_load(void) {
     GDesktopAppInfo *di = G_DESKTOP_APP_INFO(ai);
     AppEntry *e = g_new0(AppEntry, 1);
     e->info = g_object_ref(di);
-    e->icon = app_load_icon(di, 32);
     g_ptr_array_add(out, e);
   }
   g_list_free_full(all, g_object_unref);

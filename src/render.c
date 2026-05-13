@@ -1,5 +1,6 @@
 #include "render.h"
 
+#include "apps.h"
 #include "candidates.h"
 #include "context.h"
 
@@ -362,9 +363,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
 
   BrCandidate *sel = br_ctx_selected(ctx);
   GdkPixbuf *hero_pb = sel ? sel->icon : NULL;
-  if (sel && sel->kind == BR_CAND_APP && hero_pb == NULL) {
+  if (sel && sel->kind == BR_CAND_APP) {
     AppEntry *e = g_ptr_array_index(ctx->apps, sel->app_index);
-    hero_pb = e->icon;
+    hero_pb = app_entry_icon(e);
   }
 
   double cx = width * 0.5;
@@ -450,9 +451,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
         cairo_restore(cr);
       }
       GdkPixbuf *ic = c->icon;
-      if (c->kind == BR_CAND_APP && !ic) {
+      if (c->kind == BR_CAND_APP) {
         AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
-        ic = e->icon;
+        ic = app_entry_icon(e);
       }
       draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
@@ -484,9 +485,9 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
         cairo_restore(cr);
       }
       GdkPixbuf *ic = c->icon;
-      if (c->kind == BR_CAND_APP && !ic) {
+      if (c->kind == BR_CAND_APP) {
         AppEntry *e = g_ptr_array_index(ctx->apps, c->app_index);
-        ic = e->icon;
+        ic = app_entry_icon(e);
       }
       draw_icon_fit(cr, ic, u.x0 + 8, ry + icon_pad_y, list_icon);
       pango_layout_set_text(rlo, c->title ? c->title : "", -1);
