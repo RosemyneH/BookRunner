@@ -34,7 +34,7 @@ export DEPLOY_GTK_VERSION=3
   -e AppDir/usr/bin/bookrunner \
   -d data/bookrunner.desktop \
   -i bookrunner.png \
-  --plugin ./linuxdeploy-plugin-gtk.sh \
+  --plugin gtk \
   --plugin appimage
 shopt -s nullglob
 out=""
