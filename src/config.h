@@ -43,5 +43,6 @@ struct BrConfig {
 };
 
 void br_config_init_defaults(BrConfig *c);
+void br_config_merge_bangs_ini(BrConfig *c, const char *path);
 void br_config_load(BrConfig *c);
 void br_config_clear(BrConfig *c);

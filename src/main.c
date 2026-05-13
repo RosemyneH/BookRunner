@@ -70,6 +70,7 @@ int main(void) {
   br_arena_free(&ctx.candidate_arena);
   br_config_clear(&ctx.config);
   g_clear_object(&ctx.icon_file);
+  g_clear_object(&ctx.bang_follow_icon);
   br_single_instance_release(instance_listen_fd);
   return rc == 0 ? 0 : (rc > 0 ? rc : 1);
 }

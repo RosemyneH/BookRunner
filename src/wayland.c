@@ -236,30 +236,38 @@ static void br_surface_paint(AppContext *ctx) {
   }
 }
 
-static void query_del_char(AppContext *ctx) {
-  if (!ctx->query[0]) {
+static void buf_del_last_char(char *buf) {
+  if (!buf[0]) {
     return;
   }
-  char *end = ctx->query + strlen(ctx->query);
-  char *prev = g_utf8_find_prev_char(ctx->query, end);
+  char *end = buf + strlen(buf);
+  char *prev = g_utf8_find_prev_char(buf, end);
   *prev = '\0';
 }
 
-static void query_append_cp(AppContext *ctx, uint32_t cp) {
+static void buf_append_cp(char *buf, size_t cap, uint32_t cp) {
   if (cp < 32 || cp == 127) {
     return;
   }
-  char buf[8];
-  gint n = g_unichar_to_utf8((gunichar)cp, buf);
+  char utfbuf[8];
+  gint n = g_unichar_to_utf8((gunichar)cp, utfbuf);
   if (n <= 0) {
     return;
   }
-  size_t cur = strlen(ctx->query);
-  if (cur + (size_t)n >= BR_MAX_QUERY - 1) {
+  size_t cur = strlen(buf);
+  if (cur + (size_t)n >= cap - 1) {
     return;
   }
-  memcpy(ctx->query + cur, buf, (size_t)n);
-  ctx->query[cur + (size_t)n] = '\0';
+  memcpy(buf + cur, utfbuf, (size_t)n);
+  buf[cur + (size_t)n] = '\0';
+}
+
+static void query_del_char(AppContext *ctx) {
+  buf_del_last_char(ctx->query);
+}
+
+static void query_append_cp(AppContext *ctx, uint32_t cp) {
+  buf_append_cp(ctx->query, sizeof ctx->query, cp);
 }
 
 static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard, uint32_t format, int32_t fd, uint32_t size) {
@@ -307,7 +315,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     return;
   }
   if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter || sym == XKB_KEY_grave || utf == '`') {
-    br_ctx_activate(ctx);
+    br_ctx_submit(ctx);
     return;
   }
   if (sym == XKB_KEY_Up) {
@@ -324,13 +332,27 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     }
   }
   if (sym == XKB_KEY_BackSpace) {
-    query_del_char(ctx);
-    br_ctx_refilter(ctx);
-    br_file_search_on_query_changed(ctx);
+    if (br_ctx_bang_followup_active(ctx)) {
+      if (!ctx->bang_follow_q[0]) {
+        br_ctx_bang_followup_cancel(ctx);
+      } else {
+        buf_del_last_char(ctx->bang_follow_q);
+        br_ctx_refilter(ctx);
+        br_file_search_on_query_changed(ctx);
+      }
+    } else {
+      query_del_char(ctx);
+      br_ctx_refilter(ctx);
+      br_file_search_on_query_changed(ctx);
+    }
     return;
   }
   if (input_xkb_mod_ctrl(&ctx->ixkb) && sym == XKB_KEY_u) {
-    ctx->query[0] = '\0';
+    if (br_ctx_bang_followup_active(ctx)) {
+      ctx->bang_follow_q[0] = '\0';
+    } else {
+      ctx->query[0] = '\0';
+    }
     br_ctx_refilter(ctx);
     br_file_search_on_query_changed(ctx);
     return;
@@ -339,7 +361,11 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     return;
   }
   if (utf != 0 && !input_xkb_mod_ctrl(&ctx->ixkb)) {
-    query_append_cp(ctx, utf);
+    if (br_ctx_bang_followup_active(ctx)) {
+      buf_append_cp(ctx->bang_follow_q, sizeof ctx->bang_follow_q, utf);
+    } else {
+      query_append_cp(ctx, utf);
+    }
     br_ctx_refilter(ctx);
     br_file_search_on_query_changed(ctx);
   }
@@ -407,7 +433,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer, uin
     if (bookrunner_pointer_pick_row(ctx, ctx->surf_width, ctx->surf_height, ctx->ptr_x, ctx->ptr_y, &row)) {
       uint32_t dt = time - br_btn_prev_time;
       if (br_btn_prev_valid && br_btn_prev_row == row && ctx->selected == row && dt < 450) {
-        br_ctx_activate(ctx);
+        br_ctx_submit(ctx);
         br_btn_prev_valid = false;
         return;
       }
