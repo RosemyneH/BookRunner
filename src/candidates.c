@@ -37,6 +37,22 @@ static int cmp_cstr(const void *a, const void *b) {
   return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
+static gboolean br_bang_input_is_quit(const AppContext *ctx, const char *input) {
+  if (!input || !input[0]) {
+    return FALSE;
+  }
+  g_autofree gchar *kw = NULL;
+  g_autofree gchar *tail = NULL;
+  if (!br_bang_parse(input, &ctx->config, &kw, &tail)) {
+    return FALSE;
+  }
+  if (!kw[0]) {
+    return FALSE;
+  }
+  g_autofree gchar *kw_fold = g_utf8_strdown(kw, -1);
+  return kw_fold && strcmp(kw_fold, "q") == 0;
+}
+
 static gboolean bang_kw_is_always_file(const char *kw) {
   return kw && (strcmp(kw, "fi") == 0 || strcmp(kw, "fo") == 0);
 }
@@ -582,10 +598,24 @@ void br_ctx_refilter(AppContext *ctx) {
   candidates_clear(ctx);
 
   if (ctx->bang_follow_kw[0]) {
+    if (br_bang_input_is_quit(ctx, ctx->bang_follow_q)) {
+      br_ctx_bang_followup_cancel(ctx);
+      return;
+    }
     if (strcmp(ctx->bang_follow_kw, "fi") == 0 || strcmp(ctx->bang_follow_kw, "fo") == 0 ||
         (ctx->config.bang_f_enabled && strcmp(ctx->bang_follow_kw, "f") == 0)) {
       add_f_rows(ctx, ctx->bang_follow_q);
     }
+    clamp_selected(ctx);
+    ctx->list_scroll_init_done = false;
+    ctx->list_scroll_interact_ms = 0;
+    ctx->needs_draw = true;
+    return;
+  }
+
+  if (br_bang_input_is_quit(ctx, ctx->query)) {
+    ctx->query[0] = '\0';
+    add_app_and_file_rows(ctx);
     clamp_selected(ctx);
     ctx->list_scroll_init_done = false;
     ctx->list_scroll_interact_ms = 0;
@@ -666,6 +696,10 @@ static void br_ctx_bang_followup_start(AppContext *ctx, const char *kw) {
   if (!kw || !kw[0]) {
     return;
   }
+  g_autofree gchar *kw_fold = g_utf8_strdown(kw, -1);
+  if (kw_fold && strcmp(kw_fold, "q") == 0) {
+    return;
+  }
   g_clear_object(&ctx->bang_follow_icon);
   g_strlcpy(ctx->bang_follow_kw, kw, sizeof ctx->bang_follow_kw);
   const char *lab = bang_row_label(ctx, kw);
@@ -722,6 +756,10 @@ void br_ctx_bang_followup_launch(AppContext *ctx) {
 
 void br_ctx_submit(AppContext *ctx) {
   if (br_ctx_bang_followup_active(ctx)) {
+    if (br_bang_input_is_quit(ctx, ctx->bang_follow_q)) {
+      br_ctx_bang_followup_cancel(ctx);
+      return;
+    }
     BrCandidate *c = br_ctx_selected(ctx);
     if (c && ((c->kind == BR_CAND_FILE && c->file_path) || c->kind == BR_CAND_APP ||
               (c->kind == BR_CAND_BANG && c->open_uri && c->open_uri[0]))) {
@@ -729,6 +767,12 @@ void br_ctx_submit(AppContext *ctx) {
       return;
     }
     br_ctx_bang_followup_launch(ctx);
+    return;
+  }
+  if (br_bang_input_is_quit(ctx, ctx->query)) {
+    ctx->query[0] = '\0';
+    br_ctx_refilter(ctx);
+    br_file_search_on_query_changed(ctx);
     return;
   }
   br_ctx_activate(ctx);
