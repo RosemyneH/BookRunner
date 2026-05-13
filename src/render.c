@@ -200,9 +200,19 @@ void bookrunner_list_ensure_scroll(AppContext *ctx, int width, int height) {
   }
 }
 
+bool bookrunner_list_anim_pending(const AppContext *ctx) {
+  return fabs(ctx->list_scroll_anim_px) > 0.22 || ctx->sel_pulse > 0.028;
+}
+
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   (void)width;
   (void)height;
+  if (!bookrunner_list_anim_pending(ctx)) {
+    ctx->list_anim_last_ms = 0;
+    ctx->list_scroll_anim_px = 0;
+    ctx->sel_pulse = 0;
+    return;
+  }
   if (ctx->list_anim_last_ms == 0) {
     ctx->list_anim_last_ms = br_mono_ms();
     return;
@@ -212,8 +222,8 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   if (dt <= 0) {
     return;
   }
-  if (dt > 0.25) {
-    dt = 0.25;
+  if (dt > 1.0 / 60.0) {
+    dt = 1.0 / 60.0;
   }
   ctx->list_anim_last_ms = now;
   if (fabs(ctx->list_scroll_anim_px) > 0.25) {
@@ -226,10 +236,6 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   } else {
     ctx->sel_pulse = 0;
   }
-}
-
-bool bookrunner_list_anim_pending(const AppContext *ctx) {
-  return fabs(ctx->list_scroll_anim_px) > 0.22 || ctx->sel_pulse > 0.028;
 }
 
 static uint32_t br_blend_u32(uint32_t base, uint32_t over, double t) {

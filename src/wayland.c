@@ -348,6 +348,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer, uin
       }
       ctx->selected = row;
       ctx->sel_pulse = 1.0;
+      ctx->list_anim_last_ms = 0;
       bookrunner_list_ensure_scroll(ctx, ctx->surf_width, ctx->surf_height);
       br_btn_prev_time = time;
       br_btn_prev_row = row;
@@ -656,6 +657,9 @@ int bookrunner_wayland_run(AppContext *ctx) {
     }
     while (wl_display_prepare_read(ctx->display) != 0) {
       wl_display_dispatch_pending(ctx->display);
+    }
+    if (ctx->needs_draw) {
+      br_surface_paint(ctx);
     }
     wl_display_flush(ctx->display);
     struct pollfd pfds[2];
