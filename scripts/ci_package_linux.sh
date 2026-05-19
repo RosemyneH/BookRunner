@@ -35,7 +35,7 @@ export DEPLOY_GTK_VERSION=3
   -d data/bookrunner.desktop \
   -i bookrunner.png \
   --plugin gtk \
-  --plugin appimage
+  --output appimage
 shopt -s nullglob
 out=""
 for f in ./*.AppImage ./BookRunner*.AppImage; do
