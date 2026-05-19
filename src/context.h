@@ -95,7 +95,12 @@ struct AppContext {
   int surf_width;
   int surf_height;
   bool needs_draw;
+  bool needs_resize;
   uint32_t last_serial;
+
+  bool backspace_held;
+  int64_t backspace_press_ms;
+  int64_t backspace_last_repeat_ms;
 
   InputXkb ixkb;
 };

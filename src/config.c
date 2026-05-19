@@ -92,6 +92,7 @@ void br_config_init_defaults(BrConfig *c) {
   c->bang_icons = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   c->ignored_apps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   c->bang_f_enabled = FALSE;
+  c->file_search_enabled = FALSE;
 }
 
 static void merge_bang_desc(GHashTable *into, GKeyFile *kf) {
@@ -301,6 +302,12 @@ void br_config_load(BrConfig *c) {
       c->file_roots = split_roots(roots);
       g_free(roots);
     }
+    GError *fse = NULL;
+    gboolean fsearch = g_key_file_get_boolean(kf, "files", "file_search_enabled", &fse);
+    if (!fse) {
+      c->file_search_enabled = fsearch;
+    }
+    g_clear_error(&fse);
   }
 
   merge_bangs(c->bangs, kf);
