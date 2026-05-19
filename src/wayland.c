@@ -207,6 +207,19 @@ static void br_surface_apply_input_region(AppContext *ctx) {
   wl_region_destroy(reg);
 }
 
+static void br_surface_sync_size(AppContext *ctx) {
+  if (!ctx->layer_surface) {
+    return;
+  }
+  int w = ctx->config.ui_width;
+  int h = bookrunner_desired_height(ctx, w);
+  if (w == ctx->surf_width && h == ctx->surf_height) {
+    return;
+  }
+  ctx->list_scroll_init_done = false;
+  zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)w, (uint32_t)h);
+}
+
 static void br_surface_paint(AppContext *ctx) {
   if (!ctx->surface || !ctx->shm) {
     return;
@@ -797,20 +810,36 @@ int bookrunner_wayland_run(AppContext *ctx) {
   } else {
     zwlr_layer_surface_v1_set_keyboard_interactivity(ctx->layer_surface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
   }
-  zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)ctx->config.ui_width, (uint32_t)ctx->config.ui_height);
+  {
+    int w = ctx->config.ui_width;
+    int h = bookrunner_desired_height(ctx, w);
+    zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)w, (uint32_t)h);
+  }
   wl_surface_commit(ctx->surface);
   wl_display_roundtrip(ctx->display);
-  ctx->surf_width = ctx->config.ui_width;
-  ctx->surf_height = ctx->config.ui_height;
+  if (ctx->surf_width <= 0) {
+    ctx->surf_width = ctx->config.ui_width;
+  }
+  if (ctx->surf_height <= 0) {
+    ctx->surf_height = bookrunner_desired_height(ctx, ctx->surf_width);
+  }
   ctx->needs_draw = true;
 
   while (!ctx->done) {
     br_file_search_poll(ctx);
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
+    }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
     }
     while (wl_display_prepare_read(ctx->display) != 0) {
       wl_display_dispatch_pending(ctx->display);
+    }
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
     }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
@@ -893,7 +922,12 @@ int bookrunner_wayland_run(AppContext *ctx) {
       wl_display_cancel_read(ctx->display);
     }
     wl_display_dispatch_pending(ctx->display);
+    backspace_repeat_tick(ctx);
     br_file_search_poll(ctx);
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
+    }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
     }
