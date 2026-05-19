@@ -18,6 +18,7 @@ typedef enum {
 typedef enum {
   BR_ACT_NONE = 0,
   BR_ACT_TOGGLE_BANG_F,
+  BR_ACT_TOGGLE_FILE_SEARCH,
   BR_ACT_UNIGNORE,
 } BrCandAct;
 

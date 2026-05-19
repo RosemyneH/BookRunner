@@ -207,6 +207,19 @@ static void br_surface_apply_input_region(AppContext *ctx) {
   wl_region_destroy(reg);
 }
 
+static void br_surface_sync_size(AppContext *ctx) {
+  if (!ctx->layer_surface) {
+    return;
+  }
+  int w = ctx->config.ui_width;
+  int h = bookrunner_desired_height(ctx, w);
+  if (w == ctx->surf_width && h == ctx->surf_height) {
+    return;
+  }
+  ctx->list_scroll_init_done = false;
+  zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)w, (uint32_t)h);
+}
+
 static void br_surface_paint(AppContext *ctx) {
   if (!ctx->surface || !ctx->shm) {
     return;
@@ -266,6 +279,38 @@ static void query_del_char(AppContext *ctx) {
   buf_del_last_char(ctx->query);
 }
 
+static void input_backspace_step(AppContext *ctx) {
+  if (br_ctx_bang_followup_active(ctx)) {
+    if (!ctx->bang_follow_q[0]) {
+      br_ctx_bang_followup_cancel(ctx);
+      return;
+    }
+    buf_del_last_char(ctx->bang_follow_q);
+  } else {
+    if (!ctx->query[0]) {
+      return;
+    }
+    query_del_char(ctx);
+  }
+  br_ctx_refilter(ctx);
+  br_file_search_on_query_changed(ctx);
+}
+
+static void backspace_repeat_tick(AppContext *ctx) {
+  if (!ctx->backspace_held) {
+    return;
+  }
+  int64_t now = br_now_ms();
+  if (now - ctx->backspace_press_ms < 300) {
+    return;
+  }
+  if (now - ctx->backspace_last_repeat_ms < 40) {
+    return;
+  }
+  ctx->backspace_last_repeat_ms = now;
+  input_backspace_step(ctx);
+}
+
 static void query_append_cp(AppContext *ctx, uint32_t cp) {
   buf_append_cp(ctx->query, sizeof ctx->query, cp);
 }
@@ -301,10 +346,23 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
   (void)time;
   AppContext *ctx = data;
   input_xkb_key(&ctx->ixkb, key, state);
+  xkb_keysym_t sym = input_xkb_key_sym(&ctx->ixkb, key);
+  if (sym == XKB_KEY_BackSpace) {
+    if (state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+      ctx->backspace_held = false;
+      return;
+    }
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && !ctx->backspace_held) {
+      ctx->backspace_held = true;
+      ctx->backspace_press_ms = br_now_ms();
+      ctx->backspace_last_repeat_ms = ctx->backspace_press_ms;
+      input_backspace_step(ctx);
+    }
+    return;
+  }
   if (state != WL_KEYBOARD_KEY_STATE_PRESSED) {
     return;
   }
-  xkb_keysym_t sym = input_xkb_key_sym(&ctx->ixkb, key);
   uint32_t utf = 0;
   if (ctx->ixkb.state) {
     utf = xkb_state_key_get_utf32(ctx->ixkb.state, key + 8);
@@ -330,22 +388,6 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32
     if (br_ctx_ignore_selected_app(ctx)) {
       return;
     }
-  }
-  if (sym == XKB_KEY_BackSpace) {
-    if (br_ctx_bang_followup_active(ctx)) {
-      if (!ctx->bang_follow_q[0]) {
-        br_ctx_bang_followup_cancel(ctx);
-      } else {
-        buf_del_last_char(ctx->bang_follow_q);
-        br_ctx_refilter(ctx);
-        br_file_search_on_query_changed(ctx);
-      }
-    } else {
-      query_del_char(ctx);
-      br_ctx_refilter(ctx);
-      br_file_search_on_query_changed(ctx);
-    }
-    return;
   }
   if (input_xkb_mod_ctrl(&ctx->ixkb) && sym == XKB_KEY_u) {
     if (br_ctx_bang_followup_active(ctx)) {
@@ -768,20 +810,36 @@ int bookrunner_wayland_run(AppContext *ctx) {
   } else {
     zwlr_layer_surface_v1_set_keyboard_interactivity(ctx->layer_surface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
   }
-  zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)ctx->config.ui_width, (uint32_t)ctx->config.ui_height);
+  {
+    int w = ctx->config.ui_width;
+    int h = bookrunner_desired_height(ctx, w);
+    zwlr_layer_surface_v1_set_size(ctx->layer_surface, (uint32_t)w, (uint32_t)h);
+  }
   wl_surface_commit(ctx->surface);
   wl_display_roundtrip(ctx->display);
-  ctx->surf_width = ctx->config.ui_width;
-  ctx->surf_height = ctx->config.ui_height;
+  if (ctx->surf_width <= 0) {
+    ctx->surf_width = ctx->config.ui_width;
+  }
+  if (ctx->surf_height <= 0) {
+    ctx->surf_height = bookrunner_desired_height(ctx, ctx->surf_width);
+  }
   ctx->needs_draw = true;
 
   while (!ctx->done) {
     br_file_search_poll(ctx);
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
+    }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
     }
     while (wl_display_prepare_read(ctx->display) != 0) {
       wl_display_dispatch_pending(ctx->display);
+    }
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
     }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
@@ -826,6 +884,22 @@ int bookrunner_wayland_run(AppContext *ctx) {
         timeout_ms = 16;
       }
     }
+    if (ctx->backspace_held) {
+      int64_t now = br_now_ms();
+      int until = 16;
+      int64_t held = now - ctx->backspace_press_ms;
+      if (held < 300) {
+        until = (int)(300 - held);
+      } else {
+        until = (int)(40 - (now - ctx->backspace_last_repeat_ms));
+      }
+      if (until < 1) {
+        until = 1;
+      }
+      if (timeout_ms < 0 || timeout_ms > until) {
+        timeout_ms = until;
+      }
+    }
     int pr = poll(pfds, (nfds_t)n, timeout_ms);
     if (pr < 0 && errno != EINTR) {
       break;
@@ -848,7 +922,12 @@ int bookrunner_wayland_run(AppContext *ctx) {
       wl_display_cancel_read(ctx->display);
     }
     wl_display_dispatch_pending(ctx->display);
+    backspace_repeat_tick(ctx);
     br_file_search_poll(ctx);
+    if (ctx->needs_resize) {
+      br_surface_sync_size(ctx);
+      ctx->needs_resize = false;
+    }
     if (ctx->needs_draw) {
       br_surface_paint(ctx);
     }

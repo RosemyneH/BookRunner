@@ -41,6 +41,7 @@ struct BrConfig {
   GHashTable *bang_icons;
   GHashTable *ignored_apps;
   gboolean bang_f_enabled;
+  gboolean file_search_enabled;
 };
 
 void br_config_init_defaults(BrConfig *c);

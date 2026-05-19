@@ -154,25 +154,43 @@ int64_t bookrunner_mono_ms(void) {
 static void br_ui_layout(const AppContext *ctx, int width, int height, BrUILayout *u) {
   const BrConfig *cfg = &ctx->config;
   (void)height;
-  u->pad = 10;
+  u->pad = 8;
   u->corner = 10;
-  u->hero_r = 28;
-  u->row_h = 44;
-  u->input_h = 38;
-  u->x0 = u->pad + 8;
-  u->inner_w = width - 2 * u->pad - 16;
-  u->y0 = u->pad + 6;
+  u->hero_r = 24;
+  u->row_h = 38;
+  u->input_h = 32;
+  u->x0 = u->pad + 6;
+  u->inner_w = width - 2 * u->pad - 12;
+  u->y0 = u->pad + 4;
   u->cy = u->y0 + u->hero_r;
-  u->y_title = u->y0 + u->hero_r * 2 + 7;
-  u->y_input = u->y_title + cfg->font_size * 1.4 + 5;
-  u->y_list = u->y_input + u->input_h + 6;
+  u->y_title = u->y0 + u->hero_r * 2 + 4;
+  u->y_input = u->y_title + cfg->font_size * 1.28 + 3;
+  u->y_list = u->y_input + u->input_h + 4;
+}
+
+int bookrunner_desired_height(const AppContext *ctx, int width) {
+  BrUILayout u;
+  br_ui_layout(ctx, width, 0, &u);
+  const int bottom_slack = 4;
+  int chrome = (int)(u.y_list + u.pad + bottom_slack);
+  int row_h = (int)u.row_h;
+  int max_h = ctx->config.ui_height;
+  int n = ctx->candidates ? (int)ctx->candidates->len : 0;
+  if (n <= 0) {
+    return chrome < max_h ? chrome : max_h;
+  }
+  int h = chrome + n * row_h;
+  if (h > max_h) {
+    h = max_h;
+  }
+  return h;
 }
 
 static void br_list_metrics(const AppContext *ctx, int width, int height, BrUILayout *u, double *y_list, double *list_h, double *row_h, int *visible_slots) {
   br_ui_layout(ctx, width, height, u);
   *y_list = u->y_list;
   *row_h = u->row_h;
-  double bottom = (double)height - u->pad - 6.0;
+  double bottom = (double)height - u->pad - 4.0;
   *list_h = bottom - *y_list;
   if (*list_h < *row_h) {
     *list_h = *row_h;
@@ -224,7 +242,7 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
     br_list_metrics(ctx, width, height, &u, &y_list, &list_h, &row_h, &visible);
     int n = (int)ctx->candidates->len;
     double smax = fmax(0.0, (double)n * row_h - list_h);
-    bool strip = ctx->config.list_wrap;
+    bool strip = ctx->config.list_wrap && n > 1 && smax > 0.5;
     double scroll_lo = 0;
     double scroll_hi = smax;
     if (strip) {
@@ -328,7 +346,8 @@ bool bookrunner_pointer_pick_row(AppContext *ctx, int width, int height, double 
   if (n <= 0) {
     return false;
   }
-  if (ctx->config.list_wrap) {
+  double smax = fmax(0.0, (double)n * row_h - list_h);
+  if (ctx->config.list_wrap && n > 1 && smax > 0.5) {
     *out_row = br_mod_i(vi, n);
   } else {
     if (vi < 0 || vi >= n) {
@@ -377,7 +396,7 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
 
   PangoLayout *title_lo = pango_cairo_create_layout(cr);
   PangoFontDescription *fd = pango_font_description_from_string(cfg->font);
-  pango_font_description_set_absolute_size(fd, (int)(cfg->font_size * PANGO_SCALE * 1.28));
+  pango_font_description_set_absolute_size(fd, (int)(cfg->font_size * PANGO_SCALE * 1.2));
   pango_layout_set_font_description(title_lo, fd);
   pango_layout_set_ellipsize(title_lo, PANGO_ELLIPSIZE_END);
   pango_layout_set_single_paragraph_mode(title_lo, TRUE);
@@ -410,7 +429,7 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   pango_layout_set_font_description(qlo, qfd);
   pango_layout_set_width(qlo, (int)((u.inner_w - 16) * PANGO_SCALE));
   pango_layout_set_text(qlo, br_ctx_bang_followup_active(ctx) ? ctx->bang_follow_q : ctx->query, -1);
-  draw_text_shadowed(cr, qlo, u.x0 + 8, u.y_input + 10, cfg->col_text);
+  draw_text_shadowed(cr, qlo, u.x0 + 8, u.y_input + 8, cfg->col_text);
   g_object_unref(qlo);
   pango_font_description_free(qfd);
 
@@ -428,7 +447,7 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   double y_list, list_h, row_h;
   int visible_slots;
   br_list_metrics(ctx, width, height, &u, &y_list, &list_h, &row_h, &visible_slots);
-  const double list_icon = fmax(20.0, fmin(row_h - 10.0, floor(row_h * 0.70)));
+  const double list_icon = fmax(18.0, fmin(row_h - 8.0, floor(row_h * 0.72)));
   const double text_x = u.x0 + 8 + list_icon + 8;
   const double icon_pad_y = (row_h - list_icon) * 0.5;
   const double text_pad_y = fmax(2.0, (row_h - cfg->font_size * 1.12 * 1.28) * 0.5);
@@ -441,7 +460,7 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   cairo_clip(cr);
   const double smax = fmax(0.0, (double)n * row_h - list_h);
   const double scroll_eff = ctx->list_scroll_px - ctx->list_scroll_anim_px;
-  if (cfg->list_wrap && n > 0) {
+  if (cfg->list_wrap && n > 1 && smax > 0.5) {
     double scroll_lo = row_h * 0.5 - list_h * 0.5;
     double scroll_hi = (double)(n - 1) * row_h + row_h * 0.5 - list_h * 0.5;
     if (scroll_hi < scroll_lo) {
@@ -535,12 +554,12 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   }
   cairo_restore(cr);
 
-  if (smax > 1.0 || (cfg->list_wrap && n > 1)) {
+  if (smax > 0.5) {
     double track_top = y_list + 2;
     double track_h = list_h - 4;
     double thumb_h = fmax(row_h * 0.45, track_h * list_h / ((double)n * row_h));
     double t = 0;
-    if (cfg->list_wrap && n > 0) {
+    if (cfg->list_wrap && n > 1 && smax > 0.5) {
       double slo = row_h * 0.5 - list_h * 0.5;
       double shi = (double)(n - 1) * row_h + row_h * 0.5 - list_h * 0.5;
       double span = shi - slo;

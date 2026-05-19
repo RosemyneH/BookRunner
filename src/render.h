@@ -11,4 +11,5 @@ bool bookrunner_pointer_pick_row(AppContext *ctx, int width, int height, double 
 void bookrunner_input_region_extents(const AppContext *ctx, int width, int height, int *out_x, int *out_y, int *out_w, int *out_h);
 void bookrunner_list_anim_step(AppContext *ctx, int width, int height);
 bool bookrunner_list_anim_pending(const AppContext *ctx);
+int bookrunner_desired_height(const AppContext *ctx, int width);
 int64_t bookrunner_mono_ms(void);
