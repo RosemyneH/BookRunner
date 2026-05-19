@@ -36,6 +36,9 @@ gboolean br_file_search_effective_query(const AppContext *ctx, char *buf, size_t
   g_autofree gchar *kw = NULL;
   g_autofree gchar *tail = NULL;
   if (!br_bang_parse(ctx->query, &ctx->config, &kw, &tail)) {
+    if (!ctx->config.file_search_enabled) {
+      return FALSE;
+    }
     g_strlcpy(buf, ctx->query, buflen);
     return TRUE;
   }

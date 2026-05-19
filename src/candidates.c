@@ -267,6 +267,20 @@ static void add_set_rows(AppContext *ctx) {
   g_ptr_array_add(ctx->candidates, t);
   used++;
 
+  BrCandidate *fs = alloc_candidate(ctx);
+  if (!fs) {
+    return;
+  }
+  fs->kind = BR_CAND_ACTION;
+  fs->act = BR_ACT_TOGGLE_FILE_SEARCH;
+  g_autofree gchar *fst = g_strdup_printf(
+      "File search > %s", ctx->config.file_search_enabled ? "on" : "off");
+  fs->title = br_arena_strdup(&ctx->candidate_arena, fst);
+  fs->subtitle = NULL;
+  row_icon_theme(fs, "system-search");
+  g_ptr_array_add(ctx->candidates, fs);
+  used++;
+
   BrCandidate *sec = alloc_candidate(ctx);
   if (!sec) {
     return;
@@ -588,7 +602,9 @@ static void add_app_and_file_rows(AppContext *ctx) {
   }
   g_free(idx);
 
-  append_file_rows(ctx, cap, &used);
+  if (ctx->config.file_search_enabled) {
+    append_file_rows(ctx, cap, &used);
+  }
 }
 
 void br_ctx_refilter(AppContext *ctx) {
@@ -638,6 +654,7 @@ void br_ctx_refilter(AppContext *ctx) {
   clamp_selected(ctx);
   ctx->list_scroll_init_done = false;
   ctx->list_scroll_interact_ms = 0;
+  ctx->needs_resize = true;
   ctx->needs_draw = true;
 }
 
@@ -786,6 +803,13 @@ void br_ctx_activate(AppContext *ctx) {
   if (c->kind == BR_CAND_ACTION) {
     if (c->act == BR_ACT_TOGGLE_BANG_F) {
       ctx->config.bang_f_enabled = !ctx->config.bang_f_enabled;
+      br_state_save(&ctx->config);
+      br_ctx_refilter(ctx);
+      br_file_search_on_query_changed(ctx);
+      return;
+    }
+    if (c->act == BR_ACT_TOGGLE_FILE_SEARCH) {
+      ctx->config.file_search_enabled = !ctx->config.file_search_enabled;
       br_state_save(&ctx->config);
       br_ctx_refilter(ctx);
       br_file_search_on_query_changed(ctx);
