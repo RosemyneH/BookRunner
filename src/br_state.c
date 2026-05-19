@@ -15,6 +15,11 @@ void br_state_load(BrConfig *cfg) {
     cfg->bang_f_enabled = bf;
   }
   g_clear_error(&err);
+  gboolean fs = g_key_file_get_boolean(kf, "settings", "file_search_enabled", &err);
+  if (!err) {
+    cfg->file_search_enabled = fs;
+  }
+  g_clear_error(&err);
   g_hash_table_remove_all(cfg->ignored_apps);
   if (g_key_file_has_group(kf, "ignore")) {
     gsize n = 0;
@@ -36,6 +41,7 @@ void br_state_save(const BrConfig *cfg) {
   g_autofree gchar *path = g_build_filename(dir, "state.ini", NULL);
   g_autoptr(GKeyFile) kf = g_key_file_new();
   g_key_file_set_boolean(kf, "settings", "bang_f_enabled", cfg->bang_f_enabled);
+  g_key_file_set_boolean(kf, "settings", "file_search_enabled", cfg->file_search_enabled);
   GHashTableIter it;
   gpointer k, v;
   g_hash_table_iter_init(&it, cfg->ignored_apps);
