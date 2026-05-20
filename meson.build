@@ -22,6 +22,7 @@ sqlite3_dep = dependency('sqlite3')
 wayland_scanner = find_program('wayland-scanner', native: true)
 wl_proto = files('protocols/wlr-layer-shell-unstable-v1.xml')
 cursor_shape_proto = files('protocols/cursor-shape-v1.xml')
+bg_effect_proto = files('protocols/ext-background-effect-v1.xml')
 
 wl_proto_h = custom_target(
   'wlr-layer-shell-client-protocol.h',
@@ -48,6 +49,20 @@ cursor_shape_proto_c = custom_target(
   'cursor-shape-v1-client-protocol.c',
   input: cursor_shape_proto,
   output: 'cursor-shape-v1-client-protocol.c',
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+)
+
+bg_effect_proto_h = custom_target(
+  'ext-background-effect-v1-client-protocol.h',
+  input: bg_effect_proto,
+  output: 'ext-background-effect-v1-client-protocol.h',
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+)
+
+bg_effect_proto_c = custom_target(
+  'ext-background-effect-v1-client-protocol.c',
+  input: bg_effect_proto,
+  output: 'ext-background-effect-v1-client-protocol.c',
   command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
 )
 
@@ -87,6 +102,8 @@ executable(
     wl_proto_h,
     cursor_shape_proto_c,
     cursor_shape_proto_h,
+    bg_effect_proto_c,
+    bg_effect_proto_h,
   ],
   include_directories: bookrunner_inc,
   dependencies: [
