@@ -69,6 +69,29 @@ See `scripts/run-bookrunner.sh --help` for Wayland/GDK-related options.
 
 User config path: `~/.config/bookrunner/config.ini` (see `src/config.c` for supported keys).
 
+### Glass / blur
+
+With `glass = true` (default), the panel is mostly transparent and the compositor blurs the desktop behind it when **`ext-background-effect-v1`** is available (recent Hyprland and other compositors).
+
+On Hyprland without that protocol, add:
+
+```ini
+layerrule = blur, bookrunner
+layerrule = ignorealpha 0.2, bookrunner
+```
+
+Example dark glass colors:
+
+```ini
+[ui]
+panel = #5814181e
+input_bg = #681c2030
+border = #66b0b8c8
+row_selected = #55c8d4f0
+```
+
+Defaults use **dark translucent** tints (`panel`, `input_bg`) so blur shows through while keeping a dark theme. Heavy opaque colors defeat the effect.
+
 ### Bangs (web shortcuts)
 
 Built-in **default bang URLs are not hardcoded** anymore. The shipped list lives in **`data/bangs_generated.ini`** (installed to `…/share/bookrunner/bangs_generated.ini`) with three sections:
