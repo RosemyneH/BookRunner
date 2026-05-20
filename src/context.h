@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
+#include "ext-background-effect-v1-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 struct wp_cursor_shape_manager_v1;
@@ -76,6 +77,11 @@ struct AppContext {
   struct zwlr_layer_shell_v1 *layer_shell;
   struct wl_surface *surface;
   struct zwlr_layer_surface_v1 *layer_surface;
+  struct ext_background_effect_manager_v1 *bg_effect_manager;
+  struct ext_background_effect_surface_v1 *bg_effect;
+  uint32_t bg_effect_mgr_name;
+  bool bg_effect_blur_capable;
+  bool compositor_blur;
   struct wl_keyboard *keyboard;
   struct wl_pointer *pointer;
   double ptr_x;

@@ -25,6 +25,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "cursor-shape-v1-client-protocol.h"
+#include "ext-background-effect-v1-client-protocol.h"
 
 static int br_wheel_select_delta(const AppContext *ctx, int physical_step) {
   return ctx->config.invert_list_wheel ? -physical_step : physical_step;
@@ -187,6 +188,48 @@ static void br_apply_default_pointer_cursor(AppContext *ctx, struct wl_pointer *
   wl_pointer_set_cursor(wp, serial, ctx->cursor_surface, (int32_t)img->hotspot_x, (int32_t)img->hotspot_y);
 }
 
+static void br_bg_effect_attach(AppContext *ctx) {
+  if (!ctx->bg_effect_blur_capable || !ctx->bg_effect_manager || !ctx->surface || ctx->bg_effect) {
+    return;
+  }
+  ctx->bg_effect = ext_background_effect_manager_v1_get_background_effect(ctx->bg_effect_manager, ctx->surface);
+  ctx->compositor_blur = true;
+}
+
+static void bg_effect_capabilities(void *data, struct ext_background_effect_manager_v1 *manager, uint32_t flags) {
+  (void)manager;
+  AppContext *ctx = data;
+  ctx->bg_effect_blur_capable = (flags & EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR) != 0;
+  if (!ctx->bg_effect_blur_capable) {
+    ctx->compositor_blur = false;
+  }
+  br_bg_effect_attach(ctx);
+}
+
+static const struct ext_background_effect_manager_v1_listener bg_effect_manager_listener = {
+    .capabilities = bg_effect_capabilities,
+};
+
+static void br_surface_apply_blur_region(AppContext *ctx) {
+  if (!ctx->bg_effect || !ctx->compositor) {
+    return;
+  }
+  int w = ctx->surf_width;
+  int h = ctx->surf_height;
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  int rx, ry, rw, rh;
+  bookrunner_input_region_extents(ctx, w, h, &rx, &ry, &rw, &rh);
+  struct wl_region *reg = wl_compositor_create_region(ctx->compositor);
+  if (!reg) {
+    return;
+  }
+  wl_region_add(reg, rx, ry, rw, rh);
+  ext_background_effect_surface_v1_set_blur_region(ctx->bg_effect, reg);
+  wl_region_destroy(reg);
+}
+
 static void br_surface_apply_input_region(AppContext *ctx) {
   if (!ctx->surface || !ctx->compositor) {
     return;
@@ -239,6 +282,7 @@ static void br_surface_paint(AppContext *ctx) {
   cairo_destroy(cr);
   cairo_surface_destroy(surf);
   br_surface_apply_input_region(ctx);
+  br_surface_apply_blur_region(ctx);
   wl_surface_attach(ctx->surface, slot->wlbuf, 0, 0);
   wl_surface_damage(ctx->surface, 0, 0, w, h);
   wl_surface_commit(ctx->surface);
@@ -650,6 +694,11 @@ static void registry_handle_global(void *data, struct wl_registry *reg, uint32_t
     if (ctx->pointer && !ctx->cursor_shape_device) {
       ctx->cursor_shape_device = wp_cursor_shape_manager_v1_get_pointer(ctx->cursor_shape_manager, ctx->pointer);
     }
+  } else if (strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
+    uint32_t ver = version < 1 ? version : 1;
+    ctx->bg_effect_manager = wl_registry_bind(reg, name, &ext_background_effect_manager_v1_interface, ver);
+    ctx->bg_effect_mgr_name = name;
+    ext_background_effect_manager_v1_add_listener(ctx->bg_effect_manager, &bg_effect_manager_listener, ctx);
   }
 }
 
@@ -684,6 +733,16 @@ static void registry_handle_global_remove(void *data, struct wl_registry *reg, u
     wp_cursor_shape_manager_v1_destroy(ctx->cursor_shape_manager);
     ctx->cursor_shape_manager = NULL;
   }
+  if (name == ctx->bg_effect_mgr_name && ctx->bg_effect_manager) {
+    if (ctx->bg_effect) {
+      ext_background_effect_surface_v1_destroy(ctx->bg_effect);
+      ctx->bg_effect = NULL;
+    }
+    ext_background_effect_manager_v1_destroy(ctx->bg_effect_manager);
+    ctx->bg_effect_manager = NULL;
+    ctx->bg_effect_blur_capable = false;
+    ctx->compositor_blur = false;
+  }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -693,6 +752,15 @@ static const struct wl_registry_listener registry_listener = {
 
 static void br_wayland_teardown(AppContext *ctx) {
   br_buffers_destroy_all(ctx);
+  if (ctx->bg_effect) {
+    ext_background_effect_surface_v1_destroy(ctx->bg_effect);
+    ctx->bg_effect = NULL;
+  }
+  if (ctx->bg_effect_manager) {
+    ext_background_effect_manager_v1_destroy(ctx->bg_effect_manager);
+    ctx->bg_effect_manager = NULL;
+  }
+  ctx->compositor_blur = false;
   if (ctx->layer_surface) {
     zwlr_layer_surface_v1_destroy(ctx->layer_surface);
     ctx->layer_surface = NULL;
@@ -798,6 +866,7 @@ int bookrunner_wayland_run(AppContext *ctx) {
     return 3;
   }
   ctx->surface = wl_compositor_create_surface(ctx->compositor);
+  br_bg_effect_attach(ctx);
   ctx->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
       ctx->layer_shell, ctx->surface, NULL, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "bookrunner");
   zwlr_layer_surface_v1_add_listener(ctx->layer_surface, &layer_surface_listener, ctx);
