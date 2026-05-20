@@ -72,6 +72,31 @@ static void cr_u32(cairo_t *cr, uint32_t c) {
   cairo_set_source_rgba(cr, rr, g, b, a);
 }
 
+static uint32_t br_blend_u32(uint32_t base, uint32_t over, double t) {
+  t = fmin(1.0, fmax(0.0, t));
+  uint32_t ba = (base >> 24) & 0xff, br = (base >> 16) & 0xff, bg = (base >> 8) & 0xff, bb = base & 0xff;
+  uint32_t oa = (over >> 24) & 0xff, ovrr = (over >> 16) & 0xff, ovg = (over >> 8) & 0xff, ovb = over & 0xff;
+  uint32_t na = (uint32_t)(ba * (1 - t) + oa * t);
+  uint32_t nr = (uint32_t)(br * (1 - t) + ovrr * t);
+  uint32_t ng = (uint32_t)(bg * (1 - t) + ovg * t);
+  uint32_t nb = (uint32_t)(bb * (1 - t) + ovb * t);
+  return (na << 24) | (nr << 16) | (ng << 8) | nb;
+}
+
+static uint32_t br_glass_fill_color(uint32_t c, bool compositor_blur) {
+  if (compositor_blur) {
+    return br_blend_u32(c, 0x52161a24u, 0.88);
+  }
+  return br_blend_u32(c, 0x88181e2cu, 0.6);
+}
+
+static uint32_t br_glass_border_color(uint32_t c, bool compositor_blur) {
+  if (compositor_blur) {
+    return br_blend_u32(c, 0x77b8c4d8u, 0.85);
+  }
+  return br_blend_u32(c, 0x99a8b8ccu, 0.7);
+}
+
 static void draw_round_rect(cairo_t *cr, double x, double y, double w, double h, double rad) {
   double r = fmin(rad, fmin(w, h) / 2.0);
   cairo_new_sub_path(cr);
@@ -80,6 +105,55 @@ static void draw_round_rect(cairo_t *cr, double x, double y, double w, double h,
   cairo_arc(cr, x + r, y + h - r, r, M_PI / 2.0, M_PI);
   cairo_arc(cr, x + r, y + r, r, M_PI, 3.0 * M_PI / 2.0);
   cairo_close_path(cr);
+}
+
+static void draw_glass_rect(
+    cairo_t *cr, double x, double y, double w, double h, double rad, uint32_t base, uint32_t border, bool compositor_blur) {
+  if (w < 1 || h < 1) {
+    return;
+  }
+  base = br_glass_fill_color(base, compositor_blur);
+  border = br_glass_border_color(border, compositor_blur);
+
+  draw_round_rect(cr, x, y, w, h, rad);
+  cr_u32(cr, base);
+  cairo_fill(cr);
+
+  cairo_save(cr);
+  draw_round_rect(cr, x, y, w, h, rad);
+  cairo_clip(cr);
+  cairo_pattern_t *rim = cairo_pattern_create_linear(x, y, x, y + h * 0.5);
+  cairo_pattern_add_color_stop_rgba(rim, 0.0, 1, 1, 1, compositor_blur ? 0.09 : 0.12);
+  cairo_pattern_add_color_stop_rgba(rim, 1.0, 1, 1, 1, 0);
+  cairo_set_source(cr, rim);
+  cairo_paint(cr);
+  cairo_pattern_destroy(rim);
+  if (!compositor_blur) {
+    cairo_pattern_t *shade = cairo_pattern_create_linear(x, y + h * 0.55, x, y + h);
+    cairo_pattern_add_color_stop_rgba(shade, 0.0, 0, 0, 0, 0);
+    cairo_pattern_add_color_stop_rgba(shade, 1.0, 0, 0, 0, 0.18);
+    cairo_set_source(cr, shade);
+    cairo_paint(cr);
+    cairo_pattern_destroy(shade);
+  }
+  cairo_restore(cr);
+
+  draw_round_rect(cr, x, y, w, h, rad);
+  cr_u32(cr, border);
+  cairo_set_line_width(cr, 1);
+  cairo_stroke(cr);
+
+  double ir = fmax(0, rad - 0.5);
+  cairo_save(cr);
+  draw_round_rect(cr, x + 0.5, y + 0.5, w - 1.0, h - 1.0, ir);
+  cairo_clip(cr);
+  cairo_rectangle(cr, x, y, w, h * 0.35);
+  cairo_clip(cr);
+  draw_round_rect(cr, x + 0.5, y + 0.5, w - 1.0, h - 1.0, ir);
+  cairo_set_source_rgba(cr, 1, 1, 1, compositor_blur ? 0.22 : 0.32);
+  cairo_set_line_width(cr, 1);
+  cairo_stroke(cr);
+  cairo_restore(cr);
 }
 
 static void draw_text_shadowed(cairo_t *cr, PangoLayout *layout, double x, double y, uint32_t col) {
@@ -216,8 +290,8 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   double dt = 0;
   if (ctx->list_anim_last_ms != 0) {
     dt = ((double)(now - ctx->list_anim_last_ms)) / 1000.0;
-    if (dt > 0 && dt > 1.0 / 45.0) {
-      dt = 1.0 / 45.0;
+    if (dt > 0.1) {
+      dt = 0.1;
     }
   }
   ctx->list_anim_last_ms = now;
@@ -296,17 +370,6 @@ void bookrunner_list_anim_step(AppContext *ctx, int width, int height) {
   }
 }
 
-static uint32_t br_blend_u32(uint32_t base, uint32_t over, double t) {
-  t = fmin(1.0, fmax(0.0, t));
-  uint32_t ba = (base >> 24) & 0xff, br = (base >> 16) & 0xff, bg = (base >> 8) & 0xff, bb = base & 0xff;
-  uint32_t oa = (over >> 24) & 0xff, ovrr = (over >> 16) & 0xff, ovg = (over >> 8) & 0xff, ovb = over & 0xff;
-  uint32_t na = (uint32_t)(ba * (1 - t) + oa * t);
-  uint32_t nr = (uint32_t)(br * (1 - t) + ovrr * t);
-  uint32_t ng = (uint32_t)(bg * (1 - t) + ovg * t);
-  uint32_t nb = (uint32_t)(bb * (1 - t) + ovb * t);
-  return (na << 24) | (nr << 16) | (ng << 8) | nb;
-}
-
 void bookrunner_input_region_extents(const AppContext *ctx, int width, int height, int *out_x, int *out_y, int *out_w, int *out_h) {
   BrUILayout u;
   br_ui_layout(ctx, width, height, &u);
@@ -370,14 +433,22 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   BrUILayout u;
   br_ui_layout(ctx, width, height, &u);
 
+  double panel_x = u.pad;
+  double panel_y = u.pad;
+  double panel_w = width - 2 * u.pad;
+  double panel_h = height - 2 * u.pad;
   cairo_save(cr);
-  draw_round_rect(cr, u.pad, u.pad, width - 2 * u.pad, height - 2 * u.pad, u.corner);
-  cr_u32(cr, cfg->col_panel);
-  cairo_fill(cr);
-  draw_round_rect(cr, u.pad, u.pad, width - 2 * u.pad, height - 2 * u.pad, u.corner);
-  cr_u32(cr, cfg->col_border);
-  cairo_set_line_width(cr, 1);
-  cairo_stroke(cr);
+  if (cfg->glass) {
+    draw_glass_rect(cr, panel_x, panel_y, panel_w, panel_h, u.corner, cfg->col_panel, cfg->col_border, ctx->compositor_blur);
+  } else {
+    draw_round_rect(cr, panel_x, panel_y, panel_w, panel_h, u.corner);
+    cr_u32(cr, cfg->col_panel);
+    cairo_fill(cr);
+    draw_round_rect(cr, panel_x, panel_y, panel_w, panel_h, u.corner);
+    cr_u32(cr, cfg->col_border);
+    cairo_set_line_width(cr, 1);
+    cairo_stroke(cr);
+  }
   cairo_restore(cr);
 
   BrCandidate *sel = br_ctx_selected(ctx);
@@ -414,13 +485,17 @@ void bookrunner_paint(AppContext *ctx, cairo_t *cr, int width, int height) {
   pango_font_description_free(fd);
 
   cairo_save(cr);
-  draw_round_rect(cr, u.x0, u.y_input, u.inner_w, u.input_h, 8);
-  cr_u32(cr, cfg->col_input_bg);
-  cairo_fill(cr);
-  draw_round_rect(cr, u.x0, u.y_input, u.inner_w, u.input_h, 8);
-  cr_u32(cr, cfg->col_border);
-  cairo_set_line_width(cr, 1);
-  cairo_stroke(cr);
+  if (cfg->glass) {
+    draw_glass_rect(cr, u.x0, u.y_input, u.inner_w, u.input_h, 8, cfg->col_input_bg, cfg->col_border, ctx->compositor_blur);
+  } else {
+    draw_round_rect(cr, u.x0, u.y_input, u.inner_w, u.input_h, 8);
+    cr_u32(cr, cfg->col_input_bg);
+    cairo_fill(cr);
+    draw_round_rect(cr, u.x0, u.y_input, u.inner_w, u.input_h, 8);
+    cr_u32(cr, cfg->col_border);
+    cairo_set_line_width(cr, 1);
+    cairo_stroke(cr);
+  }
   cairo_restore(cr);
 
   PangoLayout *qlo = pango_cairo_create_layout(cr);

@@ -79,14 +79,15 @@ void br_config_init_defaults(BrConfig *c) {
   c->fd_command = g_strdup("fd");
   c->plocate_command = g_strdup("plocate");
   c->file_roots = g_strdupv((char *[]){g_strdup(g_get_home_dir()), NULL});
-  c->col_panel = 0xdd1a1520u;
-  c->col_input_bg = 0xf0101010u;
+  c->col_panel = 0x5814181eu;
+  c->col_input_bg = 0x681c2030u;
   c->col_text = 0xffffffffu;
-  c->col_dim = 0xccaaaaaau;
-  c->col_border = 0x88444444u;
-  c->col_row_sel = 0x55333355u;
+  c->col_dim = 0xcc9098a8u;
+  c->col_border = 0x66b0b8c8u;
+  c->col_row_sel = 0x55c8d4f0u;
   c->list_wrap = true;
   c->invert_list_wheel = true;
+  c->glass = true;
   c->bangs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   c->bang_desc = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   c->bang_icons = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -276,6 +277,11 @@ void br_config_load(BrConfig *c) {
     gboolean inv = g_key_file_get_boolean(kf, "ui", "invert_list_wheel", &be);
     if (!be) {
       c->invert_list_wheel = inv;
+    }
+    g_clear_error(&be);
+    gboolean gl = g_key_file_get_boolean(kf, "ui", "glass", &be);
+    if (!be) {
+      c->glass = gl;
     }
     g_clear_error(&be);
   }

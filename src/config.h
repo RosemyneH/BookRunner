@@ -35,6 +35,7 @@ struct BrConfig {
 
   bool list_wrap;
   bool invert_list_wheel;
+  bool glass;
 
   GHashTable *bangs;
   GHashTable *bang_desc;
